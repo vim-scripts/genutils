@@ -2,9 +2,29 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari <hari_vim@yahoo.com>
-" Last Modified: 21-Feb-2002 @ 19:56
+" Last Modified: 06-Mar-2002 @ 19:30:22
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.11
+" Version: 1.0.15
+" Description:
+"   - A scriptlet to pass variable number of arguments to other functions.
+"   - Misc. window/buffer related functions, NumberOfWindows(),
+"     FindWindowForBuffer(), FindBufferForName(), MoveCursorToWindow(),
+"     MoveCurLineToWinLine(), SetupScratchBuffer(),
+"   - Save/Restore all the window height/width settings to be restored later.
+"   - Save/Restore position in the buffer to be restored later. Works like the
+"     built-in marks feature, but has more to it.
+"   - NotifyWindowClose() to get notifications *after* a window with the
+"     specified buffer has been closed or the buffer is unloaded. The built-in
+"     autocommands can only notify you *before* the window is closed. You can
+"     use this with the Save/Restore window settings feature to restore the
+"     user windows, after your window is closed.
+"   - ShowLinesWithSyntax() function to echo lines with syntax coloring.
+"   - ShiftWordInSpace() a small utility function to move words in the
+"     space without changing the width of the field.
+"   - A quick-sort function that can sort a buffer contents by range. Adds
+"     utility commands SortByLength and RSortByLength to sort contents by line
+"     length.
+"   - A sample function to extract the scriptId of a script.
 "
 
 " Execute this following variable in your function to make a string containing
@@ -15,24 +35,32 @@
 "     exec g:makeArgumentString
 "     exec "call Impl(" . argumentString . ")"
 "   endfu
-let makeArgumentString = ":
-    \ | if (exists('argCounter')) | let __argCounter = argCounter | endif
-    \ | if (exists('nextArgument')) | let __nextArg = nextArgument | endif
-    \ | let argCounter = 1
-    \ | let argumentString = ''
-    \ | while argCounter <= a:0
-    \ |   exec 'let nextArgument = a:' . argCounter
-    \ |   let nextArgument = substitute(nextArgument,
-    \       \"'\", \"' . \\\"'\\\" . '\", \"g\")
-    \ |   let argumentString = argumentString . \"'\" . nextArgument . \"'\" .
-    \          ((argCounter == a:0) ? '' : ', ')
-    \ |   let argCounter = argCounter + 1
-    \ | endwhile
-    \ | if (exists('__argCounter')) | let argCounter = __argCounter
-    \ |     unlet __argCounter | endif
-    \ | if (exists('__nextArg')) | let nextArgument = __nextArg
-    \ |     unlet __nextArg | endif
-    \ | :"
+let makeArgumentString = "
+    \   if (exists('argCounter'))\n
+    \    let __argCounter = argCounter\n
+    \  endif \n
+    \  if (exists('nextArgument'))\n
+    \    let __nextArg = nextArgument\n
+    \  endif\n
+    \  let argCounter = 1\n
+    \  let argumentString = ''\n
+    \  while argCounter <= a:0\n
+    \    exec 'let nextArgument = a:' . argCounter\n
+    \    let nextArgument = substitute(nextArgument,
+             \ \"'\", \"' . \\\"'\\\" . '\", \"g\")\n
+    \    let argumentString = argumentString . \"'\" . nextArgument . \"'\" .
+             \ ((argCounter == a:0) ? '' : ', ')\n
+    \    let argCounter = argCounter + 1\n
+    \  endwhile \n
+    \  if (exists('__argCounter'))\n
+    \    let argCounter = __argCounter\n
+    \    unlet __argCounter\n
+    \  endif \n
+    \  if (exists('__nextArg'))\n
+    \    let nextArgument = __nextArg\n
+    \    unlet __nextArg\n
+    \  endif\n
+    \ "
 
 "
 " Return the number of windows open currently.
@@ -105,6 +133,16 @@ function! MoveCurLineToWinLine(n)
 endfunction
 
 
+" Turn on some buffer settings that make it suitable to be a scratch buffer.
+function! SetupScratchBuffer()
+  setlocal noswapfile
+  setlocal nobuflisted
+  setlocal buftype=nofile
+  " Just in case, this will make sure we are always hidden.
+  setlocal bufhidden=delete
+endfunction
+
+
 "
 " Saves the heights of the currently open windows for restoring later.
 "
@@ -174,7 +212,7 @@ endfunction
 " Cleanup file name such that two *cleaned up* file names are easy to be
 "   compared.
 function! CleanupFileName(file)
-  let fileName=a:file
+  let fileName = a:file
   " Remove multiple path separators.
   if has("win32")
     let fileName=substitute(fileName, "\\", "/", "g")
@@ -505,6 +543,7 @@ function! ShowLinesWithSyntax() range
   exe cmd
 endfunction
 
+
 " This function shifts the word in the space without moving the following words.
 "   Doesn't work for tabs.
 function! ShiftWordInSpace(dir)
@@ -555,11 +594,102 @@ function! ShiftWordInSpace(dir)
 endfunction
 
 
-" Turn on some buffer settings that make it suitable to be a scratch buffer.
-function! SetupScratchBuffer()
-  setlocal noswapfile
-  setlocal nobuflisted
-  setlocal buftype=nofile
-  " Just in case, this will make sure we are always hidden.
-  setlocal bufhidden=delete
+"nnoremap <silent> \ :call ExecMap('\')<CR>
+"function! ExecMap(prefix)
+"  let map = input("Enter Map: ")
+"  exec "normal " . a:prefix . map
+"endfunction
+
+
+"" 
+"" Sort utilities.
+""
+
+command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
+    \ 's:CmpByLineLength', 1)
+command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
+    \ 's:CmpByLineLength', -1)
+
+"
+" Comapare functions.
+"
+
+function! s:CmpByLineLength(line1, line2, direction)
+  return a:direction * (strlen(a:line1) - strlen(a:line2))
+endfunction
+
+""
+"" Sort infrastructure.
+""
+
+"
+" To Sort a range of lines, pass the range to QSort() along with the name of a
+" function that will compare two lines.
+"
+function! QSort(cmp,direction) range
+  call s:QSortR(a:firstline, a:lastline, a:cmp, a:direction)
+endfunction
+
+
+"
+" Sort lines.  SortR() is called recursively.
+"
+function! s:QSortR(start, end, cmp, direction)
+  if a:end > a:start
+    let low = a:start
+    let high = a:end
+
+    " Arbitrarily establish partition element at the midpoint of the data.
+    let midStr = getline((a:start + a:end) / 2)
+
+    " Loop through the data until indices cross.
+    while low <= high
+
+      " Find the first element that is greater than or equal to the partition
+      "   element starting from the left Index.
+      while low < a:end
+        let str = getline(low)
+        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        if result < 0
+          let low = low + 1
+        else
+          break
+        endif
+      endwhile
+
+      " Find an element that is smaller than or equal to the partition element
+      "   starting from the right Index.
+      while high > a:start
+        let str = getline(high)
+        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        if result > 0
+          let high = high - 1
+        else
+          break
+        endif
+      endwhile
+
+      " If the indexes have not crossed, swap.
+      if low <= high
+        " Swap lines low and high.
+        let str2 = getline(high)
+        call setline(high, getline(low))
+        call setline(low, str2)
+        let low = low + 1
+        let high = high - 1
+      endif
+    endwhile
+
+    " If the right index has not reached the left side of data must now sort
+    "   the left partition.
+    if a:start < high
+      call s:QSortR(a:start, high, a:cmp, a:direction)
+    endif
+
+    " If the left index has not reached the right side of data must now sort
+    "   the right partition.
+    if low < a:end
+      call s:QSortR(low, a:end, a:cmp, a:direction)
+    endif
+  endif
 endfunction
