@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 20-Oct-2004 @ 16:58
+" Last Change: 22-Oct-2004 @ 09:44
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.16.0
+" Version: 1.17.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -266,8 +266,14 @@
 " -----------------------
 " Returns the buffer number of the given fileName if it is already loaded.
 " The fileName argument is treated literally, unlike the bufnr() which treats
-"   the argument as a filename-pattern, however it first removes one level of
-"   back-slashes from the bufferName.
+"   the argument as a filename-pattern. The function first escape all the
+"   |filename-pattern| characters before passing it to bufnr(). It should work
+"   in most of the cases, except when backslashes are used in non-windows
+"   platforms, when the result could be unpredictable.
+"
+" Note: The function removes protections for "#%" characters because, these
+"   are special characters on Vim commandline, and so are usually escaped
+"   themselves, but bufnr() wouldn't like them.
 "
 " int     FindBufferForName(String fileName)
 " -----------------------
@@ -670,7 +676,7 @@
 " String  Roman2Decimal(String str)
 " -----------------------
 " -----------------------
-" Works like the built-in escape(), except that it escapes the passed in
+" Works like the built-in escape(), except that it escapes the specified
 "   characters only if they are not already escaped, so something like
 "   Escape('a\bc\\bd', 'b') would give 'a\bc\\\bd'. The chars value directly
 "   goes into the [] collection, so it can be anything that is accepted in [].
@@ -963,6 +969,7 @@
 "   - Is setting 'scrolloff' and 'sidescrolloff' to 0 required while moving the
 "     cursor?
 "
+"   - EscapeCommand() didn't work for David Fishburn.
 "   - Save/RestoreWindowSettings doesn't work well.
 "   - Support specifying arguments (with spaces) enclosed in "" or '' for
 "     makeArgumentString. Just combine the arguments that are between "" or ''
@@ -1134,11 +1141,11 @@ endfunction
 function! FindBufferForName(fileName)
   " The name could be having extra backslashes to protect certain chars (such
   "   as '#' and '%'), so first expand them.
-  return s:FindBufferForName(DeEscape(a:fileName))
+  return s:FindBufferForName(UnEscape(a:fileName, '#%'))
 endfunction
 
 function! s:FindBufferForName(fileName)
-  let fileName = Escape(a:fileName, '[[,{\\]')
+  let fileName = Escape(a:fileName, '[?,{')
   let _isf = &isfname
   try
     set isfname-=\
@@ -2514,7 +2521,7 @@ function! SilentDelete(arg1, ...)
     let pat = a:1
   else
     let range = ''
-    let pat = arg1
+    let pat = a:arg1
   endif
   let _search = @/
   try
