@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 02-Aug-2004 @ 09:58
+" Last Change: 20-Oct-2004 @ 16:58
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.15.1
+" Version: 1.16.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -14,6 +14,10 @@
 "       "computing relative path" on Jul 29, 2002.
 "     - The ShowLinesWithSyntax() function is based on a posting by Gary
 "       Holloway (gary at castandcrew dot com) on Jan, 16 2002.
+"     - Robert Webb for the original "quick sort" algorithm from eval.txt.
+"     - Peit Delport's (pjd at 303 dot za dot net) for his original BISort()
+"       algorithm on which the BinInsertSort() and BinInsertSort2() functions
+"       are based on.
 " Download From:
 "     http://www.vim.org/script.php?script_id=197
 " Description:
@@ -144,6 +148,9 @@
 "                            int direction)
 " int     BinSearchForInsert2(int start, int end, line, String cmp,
 "                             int direction, String accessor, String context)
+" void    BinInsertSort(String cmp, int direction) range
+" void    BinInsertSort2(int start, int end, String cmp, int direction,
+"                String accessor, String mover, String context)
 " String  CommonPath(String path1, String path2)
 " String  CommonString(String str1, String str2)
 " String  RelPathFromFile(String srcFile, String tgtFile)
@@ -575,6 +582,14 @@
 "   beyond the current buffer lines. See multvals.vim plugin for example
 "   usage.
 "
+" The swapper is called with the two indices that need to be swapped, along
+" with the context, something like this:
+"     function! CustomSwapper(ind1, ind2, context)
+"
+" This is based up on the sort functions given as part of examples in the
+"   eval.txt file, however this rectifies a bug in the original algorithm and
+"   makes it generic too.
+"
 " void    QSort2(int start, int end, String cmp, int direction,
 "                String accessor, String swapper, String context)
 " -----------------------
@@ -592,6 +607,26 @@
 "
 " int     BinSearchForInsert2(int start, int end, line, String cmp,
 "                             int direction, String accessor, String context)
+" -----------------------
+" Sorts a range of lines in the current buffer, in the given range, using the
+"   comparator that is passed in. This function is just like QSort(), except
+"   that it uses Peit Delport's "binary insertion sort" algorithm, which is
+"   generally much faster than the "quick sort" algorithm.
+"
+" void    BinInsertSort(String cmp, int direction) range
+" -----------------------
+" This is a more generic version of BinInsertSort, just like QSort2, that will
+"   let you provide your own accessor and mover, so that you can extend the
+"   sorting to something beyond the current buffer lines. See multvals.vim
+"   plugin for example usage.
+"
+" The mover is called with the index that needs to be moved and the
+"   destination index to which it needs to be moved, along with the context,
+"   something like this:
+"     function! CustomMover(from, to, context)
+"
+" void    BinInsertSort2(int start, int end, String cmp, int direction,
+"                String accessor, String mover, String context)
 " -----------------------
 " -----------------------
 " Find common path component of two filenames.
@@ -949,7 +984,7 @@ if !exists('loaded_multvals') || loaded_multvals < 305
   echomsg 'genutils: You need a newer version of multvals.vim plugin'
   finish
 endif
-let loaded_genutils = 115
+let loaded_genutils = 116
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -2253,11 +2288,9 @@ function! CmpByString(line1, line2, direction)
 endfunction
 
 function! CmpByStringIgnoreCase(line1, line2, direction)
-  let line1 = substitute(a:line1, '.', '\u&', 'g')
-  let line2 = substitute(a:line2, '.', '\u&', 'g')
-  if line1 < line2
+  if a:line1 <? a:line2
     return -a:direction
-  elseif line1 > line2
+  elseif a:line1 >? a:line2
     return a:direction
   else
     return 0
@@ -2303,6 +2336,14 @@ function! s:BufLineAccessor(line, context)
   return getline(a:line)
 endfunction
 
+" The default mover that moves lines from one place to another in the current
+" buffer.
+function! s:BufLineMover(from, to, context)
+  let line = getline(a:from)
+  exec a:from.'d_'
+  call append(a:to, line)
+endfunction
+
 "
 " Sort lines.  QSortR() is called recursively.
 "
@@ -2320,8 +2361,7 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
       " Find the first element that is greater than or equal to the partition
       "   element starting from the left Index.
       while low < a:end
-        let str = {a:accessor}(low, a:context)
-        let result = {a:cmp}(str, midStr, a:direction)
+        let result = {a:cmp}({a:accessor}(low, a:context), midStr, a:direction)
         if result < 0
           let low = low + 1
         else
@@ -2332,8 +2372,7 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
       " Find an element that is smaller than or equal to the partition element
       "   starting from the right Index.
       while high > a:start
-        let str = {a:accessor}(high, a:context)
-        let result = {a:cmp}(str, midStr, a:direction)
+        let result = {a:cmp}({a:accessor}(high, a:context), midStr, a:direction)
         if result > 0
           let high = high - 1
         else
@@ -2377,8 +2416,7 @@ function! BinSearchForInsert2(start, end, line, cmp, direction, accessor,
   let end = a:end
   while start < end
     let middle = (start + end + 1) / 2
-    exec "let str = " . a:accessor . "(" . middle .  ", a:context)"
-    exec "let result = " . a:cmp . "(str, a:line, " . a:direction . ")"
+    let result = {a:cmp}({a:accessor}(middle, a:context), a:line, a:direction)
     if result < 0
       let start = middle
     else
@@ -2386,6 +2424,48 @@ function! BinSearchForInsert2(start, end, line, cmp, direction, accessor,
     endif
   endwhile
   return start
+endfunction
+
+function! BinInsertSort(cmp, direction) range
+  call BinInsertSort2(a:firstline, a:lastline, a:cmp, a:direction,
+        \ 's:BufLineAccessor', 's:BufLineMover', '')
+endfunction
+
+function! BinInsertSort2(start, end, cmp, direction, accessor, mover, context)
+  let i = a:start + 1
+  while i <= a:end
+    let low = s:BinSearchToAppend2(a:start, i, {a:accessor}(i, a:context),
+          \ a:cmp, a:direction, a:accessor, a:context)
+    " Move the object.
+    if low < i
+      call {a:mover}(i, low - 1, a:context)
+    endif
+    let i = i + 1
+  endwhile
+endfunction
+
+function! s:BinSearchToAppend(start, end, line, cmp, direction)
+  return s:BinSearchToAppend2(a:start, a:end, a:line, a:cmp, a:direction,
+        \ 's:BufLineAccessor', '')
+endfunction
+
+function! s:BinSearchToAppend2(start, end, line, cmp, direction, accessor,
+      \ context)
+  let low = a:start
+  let high = a:end
+  while low < high
+    let mid = (low + high) / 2
+    let diff = {a:cmp}({a:accessor}(mid, a:context), a:line, a:direction)
+    if diff > 0
+      let high = mid
+    else
+      let low = mid + 1
+      if diff == 0
+        break
+      endif
+    endif
+  endwhile
+  return low
 endfunction
 
 """ END: Sorting support. }}}
