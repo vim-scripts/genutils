@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 30-Mar-2003 @ 10:51AM
+" Last Change: 31-Mar-2003 @ 10:55AM
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.5.0
+" Version: 1.6.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -105,6 +105,8 @@
 " TODO:
 "   - fnamemodify() on Unix doesn't expand to full name if a name containing
 "     path components is passed in.
+"   - Support specifying arguments (with spaces) enclosed in "" or '' for
+"     makeArgumentString.
 "
 
 if exists("loaded_genutils")
@@ -299,12 +301,16 @@ endfunction
 "   without changing the column position.
 function! MoveCurLineToWinLine(n)
   normal! zt
+  if a:n == 1
+    return
+  endif
   let _wrap = &l:wrap
   setl nowrap
   let n = a:n
   if n >= winheight(0)
-    let n = winheight(0) - 1
+    let n = winheight(0)
   endif
+  let n = n - 1
   execute "normal! " . n . "\<C-Y>"
   let &l:wrap = _wrap
 endfunction
@@ -312,8 +318,8 @@ endfunction
 
 " Turn on some buffer settings that make it suitable to be a scratch buffer.
 function! SetupScratchBuffer()
-  setlocal noswapfile
   setlocal nobuflisted
+  setlocal noswapfile
   setlocal buftype=nofile
   " Just in case, this will make sure we are always hidden.
   setlocal bufhidden=delete
@@ -1471,19 +1477,12 @@ function! DefFileChangedShell()
 	let alternativeFile = 1
       endif
     endif
-    " Fow now, we need to manually fire these events. I reported the problem
-    "	and Bram agreed to fix this.
-    if ! alternativeFile
-      silent! doautocmd BufReadPre
-    else
+    if alternativeFile
       exec "edit! #" . expand('<abuf>')
     endif
     call SaveHardPosition('DefFileChangedShell')
     edit!
     call RestoreHardPosition('DefFileChangedShell')
-    if ! alternativeFile
-      silent! doautocmd BufRead
-    endif
     if orgWin != winnr()
       wincmd p
     endif
