@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 10-Jun-2004 @ 09:18
-" Requires: Vim-6.2, multvals.vim(3.5)
-" Version: 1.12.5
+" Last Change: 30-Jun-2004 @ 09:13
+" Requires: Vim-6.3, multvals.vim(3.5)
+" Version: 1.13.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -91,6 +91,94 @@
 "
 "       nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
 "
+" Function Prototypes:
+"     The types in prototypes of the functions mimic Java.
+"     This is just a full list for a quick reference, see
+"       "Documentation With Function Prototypes" for more information on the
+"       functions.
+"
+" String  MakeArgumentString(...)
+" String  MakeArgumentList(...)
+" String  CreateArgString(String argList, String sep, ...)
+" void    DebugShowArgs(...)
+" String  ExtractFuncListing(String funcName, String hLines, String tLines)
+" int     NumberOfWindows()
+" int     FindBufferForName(String fileName)
+" String  GetBufNameForAu(String bufName)
+" void    MoveCursorToWindow(int winno)
+" void    MoveCurLineToWinLine(int winLine)
+" void    IsOnlyVerticalWindow()
+" void    IsOnlyHorizontalWindow()
+" void    SetupScratchBuffer()
+" void    CleanDiffOptions()
+" boolean ArrayVarExists(String varName, int index)
+" void    MapAppendCascaded(String lhs, String rhs, String mapMode)
+" void    SaveWindowSettings()
+" void    RestoreWindowSettings()
+" void    ResetWindowSettings()
+" void    SaveWindowSettings2(String sid, boolean overwrite)
+" void    RestoreWindowSettings2(String scripid)
+" void    ResetWindowSettings2(String scripid)
+" void    SaveSoftPosition(String scriptid)
+" void    RestoreSoftPosition(String scriptid)
+" void    ResetSoftPosition(String scriptid)
+" void    SaveHardPosition(String scriptid)
+" void    RestoreHardPosition(String scriptid)
+" void    ResetHardPosition(String scriptid)
+" int     GetLinePosition(String scriptid)
+" int     GetColPosition(String scriptid)
+" boolean IsPositionSet(String scriptid)
+" String  CleanupFileName(String fileName)
+" boolean OnMS()
+" boolean PathIsAbsolute(String path)
+" boolean PathIsFileNameOnly(String path)
+" void    AddNotifyWindowClose(String windowTitle, String functionName)
+" void    RemoveNotifyWindowClose(String windowTitle)
+" void    CheckWindowClose()
+" void    ShowLinesWithSyntax() range
+" void    ShiftWordInSpace(int direction)
+" void    CenterWordInSpace()
+" void    QSort(String cmp, int direction) range
+" void    QSort2(int start, int end, String cmp, int direction,
+"                String accessor, String swapper, String context)
+" int     BinSearchForInsert(int start, int end, String line, String cmp,
+"                            int direction)
+" int     BinSearchForInsert2(int start, int end, line, String cmp,
+"                             int direction, String accessor, String context)
+" String  CommonPath(String path1, String path2)
+" String  CommonString(String str1, String str2)
+" String  RelPathFromFile(String srcFile, String tgtFile)
+" String  RelPathFromDir(String srcDir, String tgtFile)
+" String  Roman2Decimal(String str)
+" String  Escape(String str, String chars)
+" String  UnEscape(String str, String chars)
+" String  DeEscape(String str)
+" String  EscapeCommand(String cmd, String args, String pipe)
+" String  ExpandStr(String str)
+" String  QuoteStr(String str)
+" boolean CurLineHasSign()
+" void    ClearAllSigns()
+" String  UserFileComplete(String ArgLead, String CmdLine, String CursorPos,
+"                          String smartSlash, String searchPath)
+" String  UserFileExpand(String fileArgs)
+" String  GetVimCmdOutput(String cmd)
+" void    OptClearBuffer()
+" int     GetPreviewWinnr()
+" void    PutPersistentVar(String pluginName, String persistentVar,
+"                          String value)
+" void    GetPersistentVar(String pluginName, String persistentVar,
+"                          String default)
+" void    AddToFCShellPre(String funcName)
+" void    RemoveFromFCShellPre(String funcName)
+" void    AddToFCShell(String funcName)
+" void    RemoveFromFCShell(String funcName)
+" void    DefFCShellInstall()
+" void    DefFCShellUninstall()
+" boolean DefFileChangedShell()
+" void    SilentSubstitute(String pat, String cmd)
+" void    SilentDelete(String pat)
+" String  GetSpacer(int width)
+"
 " Documentation With Function Prototypes:
 " -----------------------
 " Execute the function return value to create a local variable called
@@ -175,6 +263,11 @@
 "   back-slashes from the bufferName.
 "
 " int     FindBufferForName(String fileName)
+" -----------------------
+" Returns the transformed buffer name that is suitable to be used in
+"   autocommands.
+"
+" String  GetBufNameForAu(String bufName)
 " -----------------------
 " Given the window number, moves the cursor to that window.
 "
@@ -317,7 +410,12 @@
 " -----------------------
 " -----------------------
 " Cleanup file name such that two *cleaned up* file names are easy to be
-"   compared. This probably works only on windows and unix platforms.
+"   compared. This probably works only on windows and unix platforms. Also
+"   recognizes UNC paths. Always returns paths with forward slashes only,
+"   irrespective of what your 'shellslash' setting is. The return path will
+"   always be a valid path for use in Vim, provided the original path itself
+"   was valid for the platform (a valid cygwin path after the cleanup will
+"   still be valid in a cygwin vim).
 "
 " String  CleanupFileName(String fileName)
 " -----------------------
@@ -394,7 +492,8 @@
 "   beyond the current buffer lines. See multvals.vim plugin for example
 "   usage.
 "
-" void    QSort2(int start, int end, String cmp, int direction, String accessor, String swapper, String context)
+" void    QSort2(int start, int end, String cmp, int direction,
+"                String accessor, String swapper, String context)
 " -----------------------
 " Return the line number where given line can be inserted in the current
 "   buffer. This can also be interpreted as the line in the current buffer
@@ -402,12 +501,14 @@
 " Assumes that the lines are already sorted in the given direction using the
 "   given comparator.
 "
-" int     BinSearchForInsert(int start, int end, String line, String cmp, int direction)
+" int     BinSearchForInsert(int start, int end, String line, String cmp,
+"                            int direction)
 " -----------------------
 " A more generic implementation of BinSearchForInsert, which doesn't restrict
 "   the search to the current buffer.
 "
-" int     BinSearchForInsert2(int start, int end, line, String cmp, int direction, String accessor, String context)
+" int     BinSearchForInsert2(int start, int end, line, String cmp,
+"                             int direction, String accessor, String context)
 " -----------------------
 " -----------------------
 " Find common path component of two filenames.
@@ -482,6 +583,13 @@
 "   the arguments.
 "   Usage:
 "     let fullCmd = EscapeCommand('ls', '-u '.expand('%:h'), '| grep xxx')
+"   Note:
+"     If the escaped command is used on Vim command-line (such as with ":w !",
+"     ":r !" and ":!"), you need to further protect '%', '#' and '!' chars,
+"     even if they are in quotes, to avoid getting expanded by Vim before
+"     invoking external cmd. However this is not required for using it with
+"     system() function. The easiest way to escape them is by using the
+"     Escape() function as in "Escape(fullCmd, '%#!')".
 " String  EscapeCommand(String cmd, String args, String pipe)
 " -----------------------
 "
@@ -507,6 +615,36 @@
 "
 " void    ClearAllSigns()
 " -----------------------
+" -----------------------
+" This function is suitable to be used by custom command completion functions
+"   for expanding filenames conditionally. The function could based on the
+"   context, decide whether to do a file completion or a different custom
+"   completion. See breakpts.vim and perforce.vim for examples.
+" If you pass non-zero value to smartSlash, the function decides to use
+"   backslash or forwardslash as the path separator based on the user settings
+"   and the ArgLead, but if you always want to use only forwardslash as the
+"   path separator, then pass 0. If you pass in a comma separated list of
+"   directories as searchPath, then the file expansion is limited to the files
+"   under these directories. This means, you can implement your own commands
+"   that don't expect the user to type in the full path name to the file
+"   (e.g., if the user types in the command while in the explorer window, you
+"   could assume that the path is relative to the directory being viewed). Most
+"   useful with a single directory, but also useful in combination with vim
+"   'runtimepath' in loading scripts etc. (see Runtime command in
+"   breakpts.vim).
+"
+" String  UserFileComplete(String ArgLead, String CmdLine, String CursorPos,
+"                          String smartSlash, String searchPath)
+" -----------------------
+" This is a convenience function to expand filename meta-sequences in the
+"   given arguments just as Vim would have if given to a user-defined command
+"   as arguments with completion mode set to "file". Useful
+"   if you set the completion mode of your command to anything
+"   other than the "file", and later conditionally expand arguments (for
+"   characters such as % and # and other sequences such as #10 and <cword>)
+"   after deciding which arguments represent filenames/patterns.
+"
+" String  UserFileExpand(String fileArgs)
 " -----------------------
 " This returns the output of the vim command as a string, without corrupting
 "   any registers. Returns empty string on errors. Check for v:errmsg after
@@ -563,7 +701,8 @@
 " This feature uses the '!' option of viminfo, to avoid storing all the
 "   temporary and other plugin specific global variables getting saved.
 "
-" void    PutPersistentVar(String pluginName, String persistentVar, String value)
+" void    PutPersistentVar(String pluginName, String persistentVar,
+"                          String value)
 " -----------------------
 " Ideally called from VimEnter, this simply reads the value of the global
 "   variable for the persistentVar that is saved in the viminfo in a previous
@@ -573,7 +712,8 @@
 "   should be called again in the next VimLeavePre if the variable continues
 "   to be persisted.
 "
-" void    GetPersistentVar(String pluginName, String persistentVar, String default)
+" void    GetPersistentVar(String pluginName, String persistentVar,
+"                          String default)
 " -----------------------
 " -----------------------
 " These functions channel the FileChangedShell autocommand and extend it to
@@ -672,8 +812,8 @@
 if exists('loaded_genutils')
   finish
 endif
-if v:version < 602
-  echomsg 'genutils: You need at least Vim 6.2'
+if v:version < 603
+  echomsg 'genutils: You need at least Vim 6.3'
   finish
 endif
 
@@ -684,7 +824,7 @@ if !exists('loaded_multvals') || loaded_multvals < 305
   echomsg 'genutils: You need to have multvals version 3.4 or higher'
   finish
 endif
-let loaded_genutils = 112
+let loaded_genutils = 113
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -846,6 +986,14 @@ function! s:FindBufferForName(fileName)
     let &isfname = _isf
   endtry
   return i
+endfunction
+
+function! GetBufNameForAu(bufName)
+  let bufName = a:bufName
+  " Autocommands always require forward-slashes.
+  let bufName = substitute(bufName, "\\\\", '/', 'g')
+  let bufName = escape(bufName, '*?,{}[ ')
+  return bufName
 endfunction
 
 function! MoveCursorToWindow(winno)
@@ -1146,35 +1294,42 @@ endfunction
 function! CleanupFileName(fileName)
   let fileName = a:fileName
 
-  " If filename starts with an ~.
-  " The below case takes care of this also.
-  "if match(fileName, '^\~') == 0
-  "  let fileName = substitute(fileName, '^\~', escape($HOME, '\'), '')
-  "endif
-
-  " Expand relative paths and paths containing relative components.
+  " Expand relative paths and paths containing relative components (takes care
+  " of ~ also).
   if ! PathIsAbsolute(fileName)
-    let fileName = fnamemodify(fileName, ":p")
+    let fileName = fnamemodify(fileName, ':p')
+  endif
+
+  " I think we can have UNC paths on UNIX, if samba is installed.
+  if (match(fileName, '^//') == 0) || (OnMS() && match(fileName, '^\\\\') == 0)
+    let uncPath = 1
+  else
+    let uncPath = 0
   endif
 
   " Remove multiple path separators.
-  if has("win32")
-    let fileName=substitute(fileName, '\\', '/', "g")
+  if has('win32')
+    let fileName=substitute(fileName, '\\', '/', 'g')
   elseif OnMS()
-    let fileName=substitute(fileName, '\\\{2,}', '\', "g")
+    let fileName=substitute(fileName, '\\\{2,}', '\', 'g')
   endif
-  let fileName=substitute(fileName, '/\{2,}', '/', "g")
+  let fileName=substitute(fileName, '/\{2,}', '/', 'g')
 
   " Remove ending extra path separators.
-  let fileName=substitute(fileName, '/$', '', "")
-  let fileName=substitute(fileName, '\$', '', "")
+  let fileName=substitute(fileName, '/$', '', '')
+  let fileName=substitute(fileName, '\$', '', '')
+
+  " If it was an UNC path, add back an extra slash.
+  if uncPath
+    let fileName = '/'.fileName
+  endif
 
   if OnMS()
-    let fileName=substitute(fileName, '^[A-Z]:', '\L&', "")
+    let fileName=substitute(fileName, '^[A-Z]:', '\L&', '')
 
     " Add drive letter if missing (just in case).
-    if match(fileName, '^/') == 0
-      let curDrive = substitute(getcwd(), '^\([a-zA-Z]:\).*$', '\L\1', "")
+    if !uncPath && match(fileName, '^/') == 0
+      let curDrive = substitute(getcwd(), '^\([a-zA-Z]:\).*$', '\L\1', '')
       let fileName = curDrive . fileName
     endif
   endif
@@ -1187,14 +1342,14 @@ endfunction
 "echo CleanupFileName('~/a/b/../c\d')
 
 function! OnMS()
-  return has("win32") || has("dos32") || has("win16") || has("dos16") ||
-       \ has("win95")
+  return has('win32') || has('dos32') || has('win16') || has('dos16') ||
+       \ has('win95')
 endfunction
 
 function! PathIsAbsolute(path)
   let absolute=0
-  if has("unix") || OnMS()
-    if match(a:path, "^/") == 0
+  if has('unix') || OnMS()
+    if match(a:path, '^/') == 0
       let absolute=1
     endif
   endif
@@ -1596,7 +1751,7 @@ function! CenterWordInSpace()
   let newLine = strpart(line, 0, matchInd)
   let newLine = newLine . newStr
   let newLine = newLine . strpart (line, matchInd + strlen(matchStr))
-  call setline(line('.'), newLine)
+  silent! keepjumps call setline(line('.'), newLine)
 endfunction
 
 function! MapAppendCascaded(lhs, rhs, mapMode)
@@ -1615,6 +1770,52 @@ function! MapAppendCascaded(lhs, rhs, mapMode)
   exec a:mapMode . "oremap" a:lhs self . a:rhs
 endfunction
 
+" smartSlash simply says whether to depend on shellslash and ArgLead for
+"   determining path separator. If it shouldn't depend, it will always assume
+"   that the required pathsep is forward-slash.
+function! UserFileComplete(ArgLead, CmdLine, CursorPos, smartSlash, searchPath)
+  let glob = ''
+  let opathsep = "\\"
+  let npathsep = '/'
+  if exists('+shellslash') && ! &shellslash && a:smartSlash &&
+        \ stridx(a:ArgLead, "\\") != -1
+    let opathsep = '/'
+    let npathsep = "\\"
+  endif
+  if a:searchPath !=# ''
+    call MvIterCreate(a:searchPath, MvCrUnProtectedCharsPattern(','),
+          \ 'UserFileComplete', ',')
+    while MvIterHasNext('UserFileComplete')
+      let nextPath = CleanupFileName(MvIterNext('UserFileComplete'))
+      let matches = glob(nextPath.'/'.a:ArgLead.'*')
+      if matches !~# '^\_s*$'
+        let matches = s:FixPathSep(matches, opathsep, npathsep)
+        let nextPath = substitute(nextPath, opathsep, npathsep, 'g')
+        let matches = substitute(matches, '\V'.escape(nextPath.npathsep, "\\"),
+              \ '', 'g')
+        let glob = glob . matches . "\n"
+      endif
+    endwhile
+    call MvIterDestroy('UserFileComplete')
+  else
+    let glob = s:FixPathSep(glob(a:ArgLead.'*'), opathsep, npathsep)
+  endif
+  return glob
+endfunction
+
+command! -complete=file -nargs=* GUDebugEcho :echo <q-args>
+function! UserFileExpand(fileArgs)
+  return substitute(GetVimCmdOutput(
+        \ 'GUDebugEcho ' . a:fileArgs), '^\_s\+\|\_s\+$', '', 'g')
+endfunction
+
+function! s:FixPathSep(matches, opathsep, npathsep)
+  let matches = a:matches
+  let matches = substitute(matches, a:opathsep, a:npathsep, 'g')
+  let matches = substitute(matches, "\\([^\n]\\+\\)", '\=submatch(1).'.
+        \ '(isdirectory(submatch(1)) ? a:npathsep : "")', 'g')
+  return matches
+endfunction
 
 function! GetVimCmdOutput(cmd)
   let v:errmsg = ''
@@ -1645,7 +1846,7 @@ function! OptClearBuffer()
   try
     setl modifiable
     set undolevels=-1
-    silent! 0,$delete _
+    silent! keepjumps 0,$delete _
   finally
     let &undolevels = _undolevels
     let &l:modifiable = _modifiable
@@ -1769,8 +1970,8 @@ endfunction
 " The default swapper that swaps lines in the current buffer.
 function! s:BufLineSwapper(line1, line2, context)
   let str2 = getline(a:line1)
-  call setline(a:line1, getline(a:line2))
-  call setline(a:line2, str2)
+  silent! keepjumps call setline(a:line1, getline(a:line2))
+  silent! keepjumps call setline(a:line2, str2)
 endfunction
 
 " The default accessor that returns lines from the current buffer.
@@ -2035,10 +2236,13 @@ endfunction
 
 
 " FileChangedShell handling {{{
-let s:fcShellPreFuncs = ''
-let s:fcShellFuncs = ''
+if !exists('s:fcShellPreFuncs')
+  let s:fcShellPreFuncs = ''
+  let s:fcShellFuncs = ''
+endif
 
 function! AddToFCShellPre(funcName)
+  call RemoveFromFCShellPre(a:funcName)
   let s:fcShellPreFuncs = MvAddElement(s:fcShellPreFuncs, ',', a:funcName)
 endfunction
 
@@ -2047,6 +2251,7 @@ function! RemoveFromFCShellPre(funcName)
 endfunction
 
 function! AddToFCShell(funcName)
+  call RemoveFromFCShell(a:funcName)
   let s:fcShellFuncs = MvAddElement(s:fcShellFuncs, ',', a:funcName)
 endfunction
 
