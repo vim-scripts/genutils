@@ -2,10 +2,37 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari <hari_vim@yahoo.com>
-" Last Modified: 04-Feb-2002 @ 18:49
+" Last Modified: 21-Feb-2002 @ 19:56
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.8
+" Version: 1.0.11
 "
+
+" Execute this following variable in your function to make a string containing
+"   all your arguments. The string can be used to pass the variable number of
+"   arguments received by your script further down into other functions.
+" Ex:
+"   fu! s:IF(...)
+"     exec g:makeArgumentString
+"     exec "call Impl(" . argumentString . ")"
+"   endfu
+let makeArgumentString = ":
+    \ | if (exists('argCounter')) | let __argCounter = argCounter | endif
+    \ | if (exists('nextArgument')) | let __nextArg = nextArgument | endif
+    \ | let argCounter = 1
+    \ | let argumentString = ''
+    \ | while argCounter <= a:0
+    \ |   exec 'let nextArgument = a:' . argCounter
+    \ |   let nextArgument = substitute(nextArgument,
+    \       \"'\", \"' . \\\"'\\\" . '\", \"g\")
+    \ |   let argumentString = argumentString . \"'\" . nextArgument . \"'\" .
+    \          ((argCounter == a:0) ? '' : ', ')
+    \ |   let argCounter = argCounter + 1
+    \ | endwhile
+    \ | if (exists('__argCounter')) | let argCounter = __argCounter
+    \ |     unlet __argCounter | endif
+    \ | if (exists('__nextArg')) | let nextArgument = __nextArg
+    \ |     unlet __nextArg | endif
+    \ | :"
 
 "
 " Return the number of windows open currently.
@@ -151,7 +178,7 @@ function! CleanupFileName(file)
   " Remove multiple path separators.
   if has("win32")
     let fileName=substitute(fileName, "\\", "/", "g")
-  elseif has("win16") || has("dos16") || has("dos32")
+  elseif OnMS()
     let fileName=substitute(fileName, "\\\\{2,}", "\\", "g")
   endif
   let fileName=substitute(fileName, "/\\{2,}", "/", "g")
@@ -160,25 +187,31 @@ function! CleanupFileName(file)
   let fileName=substitute(fileName, "/$", "", "")
   let fileName=substitute(fileName, "\\$", "", "")
 
-  if has("win32") || has("dos32") || has("win16") || has("dos16")
+  if OnMS()
     let fileName=substitute(fileName, "^[A-Z]:", "\\L&", "")
   endif
   return fileName
 endfunction
 
+
+function! OnMS()
+  return has("win32") || has("dos32") || has("win16") || has("dos16") ||
+       \ has("win95")
+endfunction
+
 function! PathIsAbsolute(path)
   let absolute=0
-  if has("unix") || has("win32")
-    if match(a:path, "/") == 0
+  if has("unix") || OnMS()
+    if match(a:path, "^/") == 0
       let absolute=1
     endif
   endif
-  if (! absolute) && has("win32")
-    if match(a:path, "\\") == 0
+  if (! absolute) && OnMS()
+    if match(a:path, "^\\") == 0
       let absolute=1
     endif
   endif
-  if (! absolute) && (has("win32") || has("dos32") || has("win16") || has("dos16"))
+  if (! absolute) && OnMS()
     if match(a:path, "^[A-Za-z]:") == 0
       let absolute=1
     endif
@@ -318,6 +351,10 @@ endfunction
 
 
 function! RemoveNotifyWindowClose(windowTitle)
+  if !exists("s:notifyWindowTitles")
+    return
+  endif
+
   if MvContainsElement(s:notifyWindowTitles, ":", a:windowTitle)
     let index = MvIndexOfElement(s:notifyWindowTitles, ":", a:windowTitle)
     let s:notifyWindowTitles = MvRemoveElementAt(s:notifyWindowTitles, ":",
@@ -340,6 +377,10 @@ endfunction
 
 
 function! CheckWindowClose()
+  if !exists("s:notifyWindowTitles")
+    return
+  endif
+
   " First make an array with all the existing window titles.
   let i = 1
   let currentWindows = ""
@@ -462,4 +503,63 @@ function! ShowLinesWithSyntax() range
 
   let g:firstone = cmd
   exe cmd
+endfunction
+
+" This function shifts the word in the space without moving the following words.
+"   Doesn't work for tabs.
+function! ShiftWordInSpace(dir)
+  let moveToWordStart = '"_yiw'
+  if a:dir == 1 " forward.
+    " If currently on <Space>...
+    if getline(".")[col(".") - 1] == " "
+      let moveCommand = 'e'
+    else
+      let moveCommand = moveToWordStart . 'e'
+    endif
+    let removeCommand = "lx"
+    let pasteCommand = moveToWordStart . "i "
+    let offset = 1
+  else " backward.
+    " If currently on <Space>...
+    if getline(".")[col(".") - 1] == " "
+      let moveCommand = 'w'
+    else
+      let moveCommand = moveToWordStart
+    endif
+    let removeCommand = "hx"
+    let pasteCommand = moveToWordStart . "ea "
+    let offset = -3
+  endif
+
+  " Check if there is a space at the end.
+  exec "normal" moveCommand
+  let savedCol = col(".")
+  let curCol = col(".")
+  let possible = 0
+  if col("$") == (curCol + 1) " Works only for forward case, as expected.
+    let possible = 1
+  elseif getline(".")[curCol + offset] == " "
+    " Remove the space from here.
+    exec "normal" removeCommand
+    let possible = 1
+  endif
+
+  " Move back into the word.
+  exec "normal" savedCol . "|"
+  if possible == 1
+    exec "normal" pasteCommand
+  endif
+  " Move to the word start.
+  exec "normal" savedCol . "|"
+  exec "normal" moveToWordStart
+endfunction
+
+
+" Turn on some buffer settings that make it suitable to be a scratch buffer.
+function! SetupScratchBuffer()
+  setlocal noswapfile
+  setlocal nobuflisted
+  setlocal buftype=nofile
+  " Just in case, this will make sure we are always hidden.
+  setlocal bufhidden=delete
 endfunction
