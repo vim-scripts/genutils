@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 10-Apr-2002 @ 10:48
+" Last Modified: 09-Aug-2002 @ 19:51
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.24
+" Version: 1.1.0
 " Download From:
 "     http://vim.sourceforge.net/scripts/script.php?script_id=197
 " Description:
@@ -31,8 +31,9 @@
 "     There is also a test function called RunNotifyWindowCloseTest() that
 "     demos the usage.
 "   - ShowLinesWithSyntax() function to echo lines with syntax coloring.
-"   - ShiftWordInSpace(), AlignWordWithWordInPreviousLine() utility functions to
-"     move words in the space without changing the width of the field.
+"   - ShiftWordInSpace(), CenterWordInSpace() and
+"     AlignWordWithWordInPreviousLine() utility functions to move words in the
+"     space without changing the width of the field.
 "   - A quick-sort function that can sort a buffer contents by range. Adds
 "     utility commands SortByLength and RSortByLength to sort contents by line
 "     length.
@@ -42,6 +43,37 @@
 "     command. But this method allows you to continue typing the command and
 "     even backspace on errors.
 "   - A sample function to extract the scriptId of a script.
+"   - New CommonPath() function to extract the common part of two paths, and
+"     RelPathFromFile() and RelPathFromDir() to find relative paths (useful
+"     HTML href's)
+"   - Functions to have persistent data, PutPersistentVar() and
+"     GetPersistentVar(). You don't need to worry about saving in files and
+"     reading them back. To disable, set g:genutilsNoPersist in your vimrc.
+"
+"     Example: Put the following in a file called t.vim in your plugin
+"     directory and watch the magic. You can set new value using SetVar() and
+"     see that it returns the same value across session when GetVar() is
+"     called.
+"     >>>>t.vim<<<<
+"	au VimEnter * call LoadSettings()
+"	au VimLeavePre * call SaveSettings()
+"	
+"	function! LoadSettings()
+"	  let s:tVar = GetPersistentVar("T", "tVar", "defVal")
+"	endfunction
+"	
+"	function! SaveSettings()
+"	  call PutPersistentVar("T", "tVar", s:tVar)
+"	endfunction
+"	
+"	function! SetVar(val)
+"	  let s:tVar = a:val
+"	endfunction
+"	
+"	function! GetVar()
+"	  return s:tVar
+"	endfunction
+"     <<<<t.vim>>>>
 "
 "   - Place the following  in your vimrc if you find them useful:
 "
@@ -57,8 +89,12 @@
 "
 "	nnoremap <silent> <C-Space> :call ShiftWordInSpace(1)<CR>
 "	nnoremap <silent> <C-BS> :call ShiftWordInSpace(-1)<CR>
+"	nnoremap <silent> \cw :call CenterWordInSpace()<CR>
 "
 "	nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
+" TODO:
+"   - fnamemodify() on Unix doesn't expand to full name if a name containing
+"     path components is passed in.
 "
 
 if exists("loaded_genutils")
@@ -370,26 +406,49 @@ endfunction
 
 
 " Cleanup file name such that two *cleaned up* file names are easy to be
-"   compared.
-function! CleanupFileName(file)
-  let fileName = a:file
+"   compared. This probably works only on windows and unix platforms.
+function! CleanupFileName(fileName)
+  let fileName = a:fileName
+
+  " If filename starts with an ~.
+  " The below case takes care of this also.
+  "if match(fileName, '^\~') == 0
+  "  let fileName = substitute(fileName, '^\~', escape($HOME, '\'), '')
+  "endif
+
+  " Expand relative paths and paths containing relative components.
+  if ! PathIsAbsolute(fileName)
+    let fileName = fnamemodify(fileName, ":p")
+  endif
+
   " Remove multiple path separators.
   if has("win32")
-    let fileName=substitute(fileName, "\\", "/", "g")
+    let fileName=substitute(fileName, '\\', '/', "g")
   elseif OnMS()
-    let fileName=substitute(fileName, "\\\\{2,}", "\\", "g")
+    let fileName=substitute(fileName, '\\\{2,}', '\', "g")
   endif
-  let fileName=substitute(fileName, "/\\{2,}", "/", "g")
+  let fileName=substitute(fileName, '/\{2,}', '/', "g")
 
   " Remove ending extra path separators.
-  let fileName=substitute(fileName, "/$", "", "")
-  let fileName=substitute(fileName, "\\$", "", "")
+  let fileName=substitute(fileName, '/$', '', "")
+  let fileName=substitute(fileName, '\$', '', "")
 
   if OnMS()
-    let fileName=substitute(fileName, "^[A-Z]:", "\\L&", "")
+    let fileName=substitute(fileName, '^[A-Z]:', '\L&', "")
+
+    " Add drive letter if missing (just in case).
+    if match(fileName, '^/') == 0
+      let curDrive = substitute(getcwd(), '^\([a-zA-Z]:\).*$', '\L\1', "")
+      let fileName = curDrive . fileName
+    endif
   endif
   return fileName
 endfunction
+"echo CleanupFileName('\\a///b/c\')
+"echo CleanupFileName('C:\a/b/c\d')
+"echo CleanupFileName('a/b/c\d')
+"echo CleanupFileName('~/a/b/c\d')
+"echo CleanupFileName('~/a/b/../c\d')
 
 
 function! OnMS()
@@ -767,34 +826,37 @@ endfunction
 " This function shifts the word in the space without moving the following words.
 "   Doesn't work for tabs.
 function! ShiftWordInSpace(dir)
-  let moveToWordStart = '"_yiW'
   if a:dir == 1 " forward.
     " If currently on <Space>...
     if getline(".")[col(".") - 1] == " "
-      let moveCommand = 'E'
+      let move1 = 'wf '
     else
-      let moveCommand = moveToWordStart . 'E'
+      " If next col is a 
+      "if getline(".")[col(".") + 1]
+      let move1 = 'f '
     endif
-    let removeCommand = "lx"
-    let pasteCommand = moveToWordStart . "i "
-    let offset = 1
+    let removeCommand = "x"
+    let pasteCommand = "bi "
+    let move2 = 'w'
+    let offset = 0
   else " backward.
     " If currently on <Space>...
     if getline(".")[col(".") - 1] == " "
-      let moveCommand = 'w'
+      let move1 = 'w'
     else
-      let moveCommand = moveToWordStart
+      let move1 = '"_yiW'
     endif
     let removeCommand = "hx"
-    let pasteCommand = moveToWordStart . "Ea "
+    let pasteCommand = 'h"_yiwEa '
+    let move2 = 'b'
     let offset = -3
   endif
 
-  " Check if there is a space at the end.
-  exec "normal" moveCommand
   let savedCol = col(".")
+  exec "normal" move1
   let curCol = col(".")
   let possible = 0
+  " Check if there is a space at the end.
   if col("$") == (curCol + 1) " Works only for forward case, as expected.
     let possible = 1
   elseif getline(".")[curCol + offset] == " "
@@ -804,13 +866,50 @@ function! ShiftWordInSpace(dir)
   endif
 
   " Move back into the word.
-  exec "normal" savedCol . "|"
+  "exec "normal" savedCol . "|"
   if possible == 1
     exec "normal" pasteCommand
+    exec "normal" move2
+  else
+    " Move to the original location.
+    exec "normal" savedCol . "|"
   endif
-  " Move to the word start.
-  exec "normal" savedCol . "|"
-  exec "normal" moveToWordStart
+endfunction
+
+
+function! CenterWordInSpace()
+  let line = getline('.')
+  let orgCol = col('.')
+  " If currently on <Space>...
+  if line[orgCol - 1] == " "
+    let matchExpr = ' *\%'. orgCol . 'c *\w\+ \+'
+  else
+    let matchExpr = ' \+\(\w*\%' . orgCol . 'c\w*\) \+'
+  endif
+  let matchInd = match(line, matchExpr)
+  if matchInd == -1
+    return
+  endif
+  let matchStr = matchstr(line,  matchExpr)
+  let nSpaces = strlen(substitute(matchStr, '[^ ]', '', 'g'))
+  let word = substitute(matchStr, ' ', '', 'g')
+  let middle = nSpaces / 2
+  let left = nSpaces - middle
+  let newStr = ''
+  while middle > 0
+    let newStr = newStr . ' '
+    let middle = middle - 1
+  endwhile
+  let newStr = newStr . word
+  while left > 0
+    let newStr = newStr . ' '
+    let left = left - 1
+  endwhile
+
+  let newLine = strpart(line, 0, matchInd)
+  let newLine = newLine . newStr
+  let newLine = newLine . strpart (line, matchInd + strlen(matchStr))
+  call setline(line('.'), newLine)
 endfunction
 
 
@@ -904,11 +1003,39 @@ endfunction
 "
 
 function! s:CmpByLineLength(line1, line2, direction)
-  return a:direction * (strlen(a:line1) - strlen(a:line2))
+  let len1 = strlen(a:line1)
+  let len2 = strlen(a:line2)
+  if (len1 == len2)
+    return s:CmpByName(a:line1, a:line2, a:direction)
+  else
+    return a:direction * (len1 - len2)
+  endif
 endfunction
 
-""
-"" Sort infrastructure. {{{
+function! s:CmpByName(line1, line2, direction)
+  if a:line1 < a:line2
+    return -a:direction
+  elseif a:line1 > a:line2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+function! s:CmpByNumber(line1, line2, direction)
+  let num1 = a:line1 + 0
+  let num2 = a:line2 + 0
+
+  if num1 < num2
+    return -a:direction
+  elseif num1 > num2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
+"" START: Sorting support. {{{
 ""
 
 "
@@ -983,7 +1110,7 @@ function! s:QSortR(start, end, cmp, direction)
   endif
 endfunction
 
-""" END: Sort InfraSetup. }}}
+""" END: Sorting support. }}}
 
 
 " Eats character if it matches the given pattern.
@@ -1001,5 +1128,131 @@ function! EatChar(pat)
    let c = nr2char(getchar())
    return (c =~ a:pat) ? '' : c
 endfun
+
+
+" Convert Roman numerals to decimal. Doesn't detect format errors.
+"
+" Originally,
+" From: "Preben Peppe Guldberg" <c928400@student.dtu.dk>
+" Date: Fri, 10 May 2002 14:28:19 +0200
+"
+" START: Roman2Decimal {{{
+let s:I = 1
+let s:V = 5
+let s:X = 10
+let s:L = 50
+let s:C = 100
+let s:D = 500
+let s:M = 1000
+
+fun! s:Char2Num(c)
+    " A bit of magic on empty strings
+    if a:c == ""
+        return 0
+    endif
+    exec 'let n = s:' . toupper(a:c)
+    return n
+endfun
+
+fun! Roman2Decimal(str)
+    if a:str !~? '^[IVXLCDM]\+$'
+        return a:str
+    endif
+    let sum = 0
+    let i = 0
+    let n0 = s:Char2Num(a:str[i])
+    let len = strlen(a:str)
+    while i < len
+        let i = i + 1
+        let n1 = s:Char2Num(a:str[i])
+        " Magic: n1=0 when i exceeds len
+        if n1 > n0
+            let sum = sum - n0
+        else
+            let sum = sum + n0
+        endif
+        let n0 = n1
+    endwhile
+    return sum
+endfun
+" END: Roman2Decimal }}}
+
+
+" BEGIN: Relative path {{{
+" Find common path component of two filenames, based on the tread, "computing
+" relative path".
+" Date: Mon, 29 Jul 2002 21:30:56 +0200 (CEST)
+function! CommonPath(path1, path2)
+  let path1 = CleanupFileName(a:path1)
+  let path2 = CleanupFileName(a:path2)
+  if path1 == path2
+    return path1
+  endif
+  let n = 0
+  while path1[n] == path2[n]
+    let n = n+1
+  endwhile
+  return strpart(path1, 0, n)
+endfunction
+
+
+function! RelPathFromFile(srcFile, tgtFile)
+  return RelPathFromDir(fnamemodify(a:srcFile, ':r'), a:tgtFile)
+endfunction
+
+
+function! RelPathFromDir(srcDir, tgtFile)
+  let cleanDir = CleanupFileName(a:srcDir)
+  let cleanFile = CleanupFileName(a:tgtFile)
+  let cmnPath = CommonPath(cleanDir, cleanFile)
+  let shortDir = strpart(cleanDir, strlen(cmnPath))
+  let shortFile = strpart(cleanFile, strlen(cmnPath))
+  let relPath = substitute(substitute(shortDir, '[^/]\+$', '', ''),
+	\ '[^/]\+', '..', 'g')
+  return relPath . shortFile
+endfunction
+
+" END: Relative path }}}
+
+" BEGIN: Persistent settings {{{
+if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
+
+" Make sure the '!' option to store global variables that are upper cased are
+" stored in viminfo file.
+set viminfo+=!
+
+" The pluginName and persistentVar have to be unique and are case insensitive.
+" Should be called from VimLeavePre. This simply creates a global variable which
+"   will be persisted by Vim through viminfo. The variable can be read back in
+"   the next session by the plugin using GetPersistentVar() function. The
+"   pluginName is to provide a name space for different plugins, and avoid
+"   conflicts in using the same persistentVar name.
+" This feature uses the '!' option of viminfo, to avoid storing all the
+"   temporary and other plugin specific global variables getting saved.
+function! PutPersistentVar(pluginName, persistentVar, value)
+  let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
+  exec 'let ' . globalVarName . " = '" . a:value . "'"
+endfunction
+
+" Should be called from VimEnter. Simply reads the gloval variable for the
+"   value and returns it. Removed the variable from global space before
+"   returning the value, so should be called only once.
+function! GetPersistentVar(pluginName, persistentVar, default)
+  let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
+  if (exists(globalVarName))
+    exec 'let value = ' . globalVarName
+    exec 'unlet ' . globalVarName
+  else
+    let value = a:default
+  endif
+  return value
+endfunction
+
+function! s:PersistentVarName(pluginName, persistentVar)
+  return 'g:GU_' . toupper(a:pluginName) . '_' . toupper(a:persistentVar)
+endfunction
+
+endif
+" END: Persistent settings }}}
 
 " vim6:fdm=marker
