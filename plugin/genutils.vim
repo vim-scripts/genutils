@@ -1,13 +1,19 @@
-"
-" Useful buffer, file and window related functions.
-"
+" genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 30-Jun-2004 @ 09:13
+" Last Change: 02-Aug-2004 @ 09:58
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.13.1
+" Version: 1.14.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
+" Acknowledgements:
+"     - The GetNextWinnrInStack() function is based on the WinStackMv()
+"       function posted by Charles E. Campbell, Jr. on vim mailing list on Jul
+"       14, 2004.
+"     - The CommonPath() function is based on the thread,
+"       "computing relative path" on Jul 29, 2002.
+"     - The ShowLinesWithSyntax() function is based on a posting by Gary
+"       Holloway (gary at castandcrew dot com) on Jan, 16 2002.
 " Download From:
 "     http://www.vim.org/script.php?script_id=197
 " Description:
@@ -74,22 +80,6 @@
 "     for the source control plugins to conditionally reload a file, while
 "     being able to default to the Vim's standard behavior of asking the user.
 "     See perforce.vim for usage examples.
-"   - Place the following in your vimrc if you find them useful:
-"
-"       command! DiffOff :call CleanDiffOptions()
-"       
-"       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
-"           \ 'CmpByLengthNname', 1)
-"       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
-"           \ 'CmpByLineLengthNname', -1)
-"       command! -nargs=0 -range=% SortJavaImports <line1>,<line2>call QSort(
-"           \ 'CmpJavaImports', 1)
-"
-"       nnoremap <silent> <C-Space> :call ShiftWordInSpace(1)<CR>
-"       nnoremap <silent> <C-BS> :call ShiftWordInSpace(-1)<CR>
-"       nnoremap <silent> \cw :call CenterWordInSpace()<CR>
-"
-"       nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
 "
 " Function Prototypes:
 "     The types in prototypes of the functions mimic Java.
@@ -109,6 +99,10 @@
 " void    MoveCurLineToWinLine(int winLine)
 " void    IsOnlyVerticalWindow()
 " void    IsOnlyHorizontalWindow()
+" int     GetNextWinnrInStack(char dir)
+" int     GetLastWinnrInStack(char dir)
+" void    MoveCursorToNextInWinStack(char dir)
+" void    MoveCursorToLastInWinStack(char dir)
 " void    SetupScratchBuffer()
 " void    CleanDiffOptions()
 " boolean ArrayVarExists(String varName, int index)
@@ -119,6 +113,8 @@
 " void    SaveWindowSettings2(String sid, boolean overwrite)
 " void    RestoreWindowSettings2(String scripid)
 " void    ResetWindowSettings2(String scripid)
+" void    SaveVisualSelection(String scripid)
+" void    RestoreVisualSelection(String scripid)
 " void    SaveSoftPosition(String scriptid)
 " void    RestoreSoftPosition(String scriptid)
 " void    ResetSoftPosition(String scriptid)
@@ -286,6 +282,38 @@
 "
 " void    IsOnlyHorizontalWindow()
 " -----------------------
+" Returns the window number of the next window while remaining in the same
+"   horizontal or vertical window stack (or 0 when there are no more). Pass
+"   hjkl characters to indicate direction.
+"   Usage:
+"     let wn = GetNextWinnrInStack('h') left  window number in stack.
+"     let wn = GetNextWinnrInStack('l') right window number in stack.
+"     let wn = GetNextWinnrInStack('j') upper window number in stack.
+"     let wn = GetNextWinnrInStack('k') lower window number in stack.
+"
+" int     GetNextWinnrInStack(char dir)
+" -----------------------
+" Returns the window number of the last window while remaining in the same
+"   horizontal or vertical window stack (or 0 when there are no more, or it is
+"   already the last window). Pass hjkl characters to indicate direction.
+"   Usage:
+"     let wn = GetLastWinnrInStack('h') leftmost  window number in stack.
+"     let wn = GetLastWinnrInStack('l') rightmost window number in stack.
+"     let wn = GetLastWinnrInStack('j') top       window number in stack.
+"     let wn = GetLastWinnrInStack('k') bottom    window number in stack.
+"
+" int     GetLastWinnrInStack(char dir)
+" -----------------------
+" Move cursor to the next window in stack. See GetNextWinnrInStack() for more
+"   information.
+"
+" void    MoveCursorToNextInWinStack(char dir)
+" -----------------------
+" Move cursor to the last window in stack. See GetLastWinnrInStack() for more
+"   information.
+"
+" void    MoveCursorToLastInWinStack(char dir)
+" -----------------------
 " Turn on some buffer settings that make it suitable to be a scratch buffer.
 "
 " void    SetupScratchBuffer()
@@ -344,7 +372,8 @@
 " -----------------------
 " Same as RestoreWindowSettings, but uses the passed in scriptid to get the
 "   settings. The settings must have been previously saved using this
-"   scriptid.
+"   scriptid. Call ResetWindowSettings2() to explicitly reset the saved
+"   settings.
 "
 " void    RestoreWindowSettings2(String scripid)
 " -----------------------
@@ -352,6 +381,20 @@
 "   Releases the variables.
 "
 " void    ResetWindowSettings2(String scripid)
+" -----------------------
+" -----------------------
+" Save the current/last visual selection such that it can be later restored
+"   using RestoreVisualSelection(). Pass a unique scripid such that it will
+"   not interfere with the other callers to this function. Saved selections
+"   are not associated with the window so you can later restore the selection
+"   in any window, provided there are enough lines/columns.
+"
+" void    SaveVisualSelection(String scripid)
+" -----------------------
+" Restore the visual selection that was previuosly saved using
+"   SaveVisualSelection().
+"
+" void    RestoreVisualSelection(String scripid)
 " -----------------------
 " -----------------------
 " This method tries to save the hard position along with the line context This
@@ -512,7 +555,7 @@
 " -----------------------
 " -----------------------
 " Find common path component of two filenames.
-"   Based on the tread, "computing relative path".
+"   Based on the thread, "computing relative path".
 "   Date: Mon, 29 Jul 2002 21:30:56 +0200 (CEST)
 " Ex:
 "   CommonPath('/a/b/c/d.e', '/a/b/f/g/h.i') => '/a/b/'
@@ -800,10 +843,48 @@
 "   - FindWindowForBuffer() function is now deprecated, as the corresponding
 "     Vim bugs are fixed. Use the below expr instead:
 "       bufwinnr(FindBufferForName(fileName))
+"
+" Sample Usages Or Tips:
+"   - Add the following command to your vimrc to turn off diff settings.
+"       command! DiffOff :call CleanDiffOptions()
+"       
+"   - Add the following commands to create simple sort commands.
+"       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
+"           \ 'CmpByLengthNname', 1)
+"       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
+"           \ 'CmpByLineLengthNname', -1)
+"       command! -nargs=0 -range=% SortJavaImports <line1>,<line2>call QSort(
+"           \ 'CmpJavaImports', 1)
+"
+"   - You might like the following mappings to adjust spacing:
+"       nnoremap <silent> <C-Space> :call ShiftWordInSpace(1)<CR>
+"       nnoremap <silent> <C-BS> :call ShiftWordInSpace(-1)<CR>
+"       nnoremap <silent> \cw :call CenterWordInSpace()<CR>
+"       nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
+"
+"   - The :find command is very useful to search for a file in path, but it
+"     doesn't support file completion. Add the following command in your vimrc
+"     to add this functionality:
+"       command! -nargs=1 -bang -complete=custom,<SID>PathComplete FindInPath
+"             \ :find<bang> <args>
+"       function! s:PathComplete(ArgLead, CmdLine, CursorPos)
+"         return UserFileComplete(a:ArgLead, a:CmdLine, a:CursorPos, 1, &path)
+"       endfunction
+"
+"   - If you are running commands that generate multiple pages of output, you
+"     might find it useful to redirect the output to a new buffer. Put the
+"     following command in your vimrc:
+"       command! -nargs=* -complete=command Redir
+"             \ :new | put! =GetVimCmdOutput('<args>') | setl bufhidden=wipe |
+"             \ setl nomodified
+"
 " TODO:
 "   - fnamemodify() on Unix doesn't expand to full name if the filename doesn't
 "     really exist on the filesystem.
+"   - Is setting 'scrolloff' and 'sidescrolloff' to 0 required while moving the
+"     cursor?
 "
+"   - Save/RestoreWindowSettings doesn't work well.
 "   - Support specifying arguments (with spaces) enclosed in "" or '' for
 "     makeArgumentString. Just combine the arguments that are between "" or ''
 "     and strip the quotes off.
@@ -821,10 +902,10 @@ if !exists('loaded_multvals')
   runtime plugin/multvals.vim
 endif
 if !exists('loaded_multvals') || loaded_multvals < 305
-  echomsg 'genutils: You need to have multvals version 3.4 or higher'
+  echomsg 'genutils: You need a newer version of multvals.vim plugin'
   finish
 endif
-let loaded_genutils = 113
+let loaded_genutils = 114
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -954,6 +1035,8 @@ function! DebugShowArgs(...)
   call input("Args: " . argString)
 endfunction
 
+" Window related functions {{{
+
 function! NumberOfWindows()
   let i = 1
   while winbufnr(i) != -1
@@ -1021,8 +1104,9 @@ endfunction
 function! IsOnlyVerticalWindow()
   let onlyVertWin = 1
   let _eventignore = &eventignore
-  set eventignore+=WinEnter,WinLeave
   try
+    "set eventignore+=WinEnter,WinLeave
+    set eventignore=all
     let curWinnr = winnr()
     wincmd j
     if winnr() != curWinnr
@@ -1044,7 +1128,7 @@ endfunction
 function! IsOnlyHorizontalWindow()
   let onlyHorizWin = 1
   let _eventignore = &eventignore
-  set eventignore+=WinEnter,WinLeave
+  set eventignore=all
   try
     let curWinnr = winnr()
     wincmd l
@@ -1063,6 +1147,115 @@ function! IsOnlyHorizontalWindow()
   endtry
   return onlyHorizWin
 endfunction
+
+function! MoveCursorToNextInWinStack(dir)
+  let newwin = GetNextWinnrInStack(a:dir)
+  if newwin != 0
+    exec newwin 'wincmd w'
+  endif
+endfunction
+
+function! GetNextWinnrInStack(dir)
+  let newwin = 0
+  let _eventignore = &eventignore
+  try
+    set eventignore=all
+    let newwin = s:GetNextWinnrInStack(a:dir)
+  finally
+    let &eventignore = _eventignore
+  endtry
+  return newwin
+endfunction
+
+function! MoveCursorToLastInWinStack(dir)
+  let newwin = GetLastWinnrInStack(a:dir)
+  if newwin != 0
+    exec newwin 'wincmd w'
+  endif
+endfunction
+
+function! GetLastWinnrInStack(dir)
+  let curwin = winnr()
+  let newwin = 0
+  let _eventignore = &eventignore
+  try
+    set eventignore=all
+    while 1
+      let wn = s:GetNextWinnrInStack(a:dir)
+      if wn != 0
+        let newwin = wn
+        exec newwin 'wincmd w'
+      else
+        break
+      endif
+    endwhile
+    exec curwin 'wincmd w'
+  finally
+    let &eventignore = _eventignore
+  endtry
+  return newwin
+endfunction
+
+" Based on the WinStackMv() function posted by Charles E. Campbell, Jr. on vim
+"   mailing list on Jul 14, 2004.
+function! s:GetNextWinnrInStack(dir)
+  "call Decho("MoveCursorToNextInWinStack(dir<".a:dir.">)")
+
+  let isHorizontalMov = (a:dir ==# 'h' || a:dir ==# 'l') ? 1 : 0
+
+  let orgwin = winnr()
+  let orgdim = s:GetWinDim(a:dir, orgwin)
+
+  let _winwidth = &winwidth
+  let _winheight = &winheight
+  try
+    set winwidth=1
+    set winheight=1
+    exec 'wincmd' a:dir
+    let newwin = winnr()
+    if orgwin == newwin
+      " No more windows in this direction.
+      "call Decho("newwin=".newwin." stopped".winheight(newwin)."x".winwidth(newwin))
+      return 0
+    endif
+    if s:GetWinDim(a:dir, newwin) != orgdim
+      " Window dimension has changed, indicates a move across window stacks.
+      "call Decho("newwin=".newwin." height changed".winheight(newwin)."x".winwidth(newwin))
+      exec orgwin 'wincmd w'
+      return 0
+    endif
+    " Determine if changing original window height affects current window
+    "   height.
+    exec orgwin 'wincmd w'
+    try
+      if orgdim == 1
+        exec 'wincmd' (isHorizontalMov ? '_' : '|')
+      else
+        exec 'wincmd' (isHorizontalMov ? '-' : '<')
+      endif
+      if s:GetWinDim(a:dir, newwin) != s:GetWinDim(a:dir, orgwin)
+        "call Decho("newwin=".newwin." different row".winheight(newwin)."x".winwidth(newwin))
+        return 0
+      endif
+      "call Decho("newwin=".newwin." same row".winheight(newwin)."x".winwidth(newwin))
+    finally
+      exec (isHorizontalMov ? '' : 'vert') 'resize' orgdim
+    endtry
+
+    "call Decho("MoveCursorToNextInWinStack")
+
+    return newwin
+  finally
+    let &winwidth = _winwidth
+    let &winheight = _winheight
+  endtry
+endfunction
+
+function! s:GetWinDim(dir, win)
+  return (a:dir ==# 'h' || a:dir ==# 'l') ? winheight(a:win) : winwidth(a:win)
+endfunction
+
+" Window related functions }}}
 
 function! SetupScratchBuffer()
   setlocal nobuflisted
@@ -1198,7 +1391,7 @@ function! GetPreviewWinnr()
   let curWinNr = winnr()
   let winnr = -1
   try
-    set eventignore+=WinLeave,WinEnter
+    set eventignore=all
     exec "wincmd P"
     let winnr = winnr()
   catch /^Vim\%((\a\+)\)\=:E441/
@@ -1249,6 +1442,13 @@ function! SaveWindowSettings2(sid, overwrite)
 endfunction
 
 function! RestoreWindowSettings2(sid)
+  " Calling twice fixes most of the resizing issues. This seems to be how the
+  " :mksession with "winsize" in 'sesionoptions' seems to work.
+  call s:RestoreWindowSettings2(a:sid)
+  call s:RestoreWindowSettings2(a:sid)
+endfunction
+
+function! s:RestoreWindowSettings2(sid)
   "if ! exists("s:winSettings" . a:sid)
   if ! ArrayVarExists("s:winSettings", a:sid)
     return
@@ -1264,20 +1464,27 @@ function! RestoreWindowSettings2(sid)
   let orgLines = MvIterNext("savedWindowSettings")
   let orgCols = MvIterNext("savedWindowSettings")
   let activeWindow = MvIterNext("savedWindowSettings")
-  
+  let mainWinSizeSame = (orgLines == &lines && orgCols == &columns)
+
   let winNo = 1
   while MvIterHasNext("savedWindowSettings")
     let height = MvIterNext("savedWindowSettings")
     let width = MvIterNext("savedWindowSettings")
-    call MoveCursorToWindow(winNo)
-    exec 'resize ' . ((&lines * height + (orgLines / 2)) / orgLines)
-    exec 'vert resize ' . ((&columns * width + (orgCols / 2)) / orgCols)
+    let height = (mainWinSizeSame ? height :
+          \ ((&lines * height + (orgLines / 2)) / orgLines))
+    let width = (mainWinSizeSame ? width :
+          \ ((&columns * width + (orgCols / 2)) / orgCols))
+    if winheight(winnr()) != height
+      exec winNo'resize' height
+    endif
+    if winwidth(winnr()) != width
+      exec 'vert' winNo 'resize' width
+    endif
     let winNo = winNo + 1
   endwhile
   
   " Restore the current window.
   call MoveCursorToWindow(activeWindow)
-  call ResetWindowSettings2(a:sid)
   "unlet g:savedWindowSettings " Debug.
   call MvIterDestroy("savedWindowSettings")
 endfunction
@@ -1290,6 +1497,35 @@ function! ResetWindowSettings2(sid)
 endfunction
 
 " Save/Restore window settings }}}
+
+" Save/Restore selection {{{
+
+function! SaveVisualSelection(sid)
+  let curmode = mode()
+  if curmode == 'n'
+    normal! gv
+  endif
+  let s:vismode{a:sid} = mode()
+  let s:firstline{a:sid} = line("'<")
+  let s:lastline{a:sid} = line("'>")
+  let s:firstcol{a:sid} = col("'<")
+  let s:lastcol{a:sid} = col("'>")
+  if curmode !=# s:vismode{a:sid}
+    exec "normal \<Esc>"
+  endif
+endfunction
+
+function! RestoreVisualSelection(sid)
+  if mode() !=# 'n'
+    exec "normal \<Esc>"
+  endif
+  if exists('s:vismode{sid}')
+    exec 'normal' s:firstline{a:sid}.'gg'.s:firstcol{a:sid}.'|'.
+          \ s:vismode{a:sid}.(s:lastline{a:sid}-s:firstline{a:sid}).'j'.
+          \ (s:lastcol{a:sid}-s:firstcol{a:sid}).'l'
+  endif
+endfunction
+" Save/Restore selection }}}
 
 function! CleanupFileName(fileName)
   let fileName = a:fileName
@@ -1385,28 +1621,25 @@ delfunc s:MyScriptId " Not required any more.
 
 "" --- START save/restore position. {{{
 
-" characters that must be escaped for a regular expression
-let s:escregexp = '[/*^$.~\'
-
 function! SaveSoftPosition(scriptid)
-  let s:startline_{a:scriptid} = getline(".")
+  let b:sp_startline_{a:scriptid} = getline(".")
   call SaveHardPosition(a:scriptid)
 endfunction
 
 function! RestoreSoftPosition(scriptid)
   0
   call RestoreHardPosition(a:scriptid)
-  let stLine = s:startline_{a:scriptid}
+  let stLine = b:sp_startline_{a:scriptid}
   if getline('.') !=# stLine
     if ! search('\V\^'.escape(stLine, "\\").'\$', 'W') 
       call search('\V\^'.escape(stLine, "\\").'\$', 'bW')
     endif
   endif
-  call MoveCurLineToWinLine(s:winline_{a:scriptid})
+  call MoveCurLineToWinLine(b:sp_winline_{a:scriptid})
 endfunction
 
 function! ResetSoftPosition(scriptid)
-  unlet s:startline_{a:scriptid}
+  unlet b:sp_startline_{a:scriptid}
 endfunction
 
 " A synonym for SaveSoftPosition.
@@ -1425,35 +1658,35 @@ function! ResetHardPositionWithContext(scriptid)
 endfunction
 
 function! SaveHardPosition(scriptid)
-  let s:col_{a:scriptid} = virtcol(".")
-  let s:lin_{a:scriptid} = line(".")
-  let s:winline_{a:scriptid} = winline()
+  let b:sp_col_{a:scriptid} = virtcol(".")
+  let b:sp_lin_{a:scriptid} = line(".")
+  let b:sp_winline_{a:scriptid} = winline()
 endfunction
 
 function! RestoreHardPosition(scriptid)
   " This doesn't take virtual column.
-  "call cursor(s:lin_{a:scriptid}, s:col_{a:scriptid})
-  execute s:lin_{a:scriptid}
-  execute "normal!" s:col_{a:scriptid} . "|"
-  call MoveCurLineToWinLine(s:winline_{a:scriptid})
+  "call cursor(b:sp_lin_{a:scriptid}, b:sp_col_{a:scriptid})
+  execute b:sp_lin_{a:scriptid}
+  execute "normal!" b:sp_col_{a:scriptid} . "|"
+  call MoveCurLineToWinLine(b:sp_winline_{a:scriptid})
 endfunction
 
 function! ResetHardPosition(scriptid)
-  unlet s:col_{a:scriptid}
-  unlet s:lin_{a:scriptid}
-  unlet s:winline_{a:scriptid}
+  unlet b:sp_col_{a:scriptid}
+  unlet b:sp_lin_{a:scriptid}
+  unlet b:sp_winline_{a:scriptid}
 endfunction
 
 function! GetLinePosition(scriptid)
-  return s:lin_{a:scriptid}
+  return b:sp_lin_{a:scriptid}
 endfunction
 
 function! GetColPosition(scriptid)
-  return s:col_{a:scriptid}
+  return b:sp_col_{a:scriptid}
 endfunction
 
 function! IsPositionSet(scriptid)
-  return exists('s:col_' . a:scriptid)
+  return exists('b:sp_col_' . a:scriptid)
 endfunction
 
 "" --- END save/restore position. }}}
@@ -1489,6 +1722,7 @@ function! AddNotifyWindowClose(windowTitle, functionName)
   aug NotifyWindowClose
     au!
     au WinEnter * :call CheckWindowClose()
+    au BufEnter * :call CheckWindowClose()
   aug END
 endfunction
 
@@ -1528,9 +1762,8 @@ function! CheckWindowClose()
   "   closed.
   " Take a copy and iterate over them, such that we can freely modify the main
   "   arrays as needed (and the caller can also concurrently modify them)
-  let windowTitlesCopy = s:notifyWindowTitles
   let windowFuncsCopy = s:notifyWindowFunctions
-  call MvIterCreate(windowTitlesCopy, ';', 'NotifyWindowClose')
+  call MvIterCreate(s:notifyWindowTitles, ';', 'NotifyWindowClose')
   let i = 0 " To track the element index.
   while MvIterHasNext('NotifyWindowClose')
     let nextWin = MvIterNext('NotifyWindowClose')
@@ -1896,14 +2129,14 @@ function! CmpJavaImports(line1, line2, direction)
     let pkg1 = ''
     let cls1 = substitute(a:line1, '.* \(^[ ]\+\)', '\1', '')
   else
-    let pkg1 = substitute(a:line1, '^\(.*\.\)[^. ;]\+.*$', '\1', '')
+    let pkg1 = substitute(a:line1, '.*import\s\+\(.*\)\.[^. ;]\+.*$', '\1', '')
     let cls1 = substitute(a:line1, '^.*\.\([^. ;]\+\).*$', '\1', '')
   endif
   if stridx(a:line2, '.') == -1
     let pkg2 = ''
     let cls2 = substitute(a:line2, '.* \(^[ ]\+\)', '\1', '')
   else
-    let pkg2 = substitute(a:line2, '^\(.*\.\)[^. ;]\+.*$', '\1', '')
+    let pkg2 = substitute(a:line2, '.*import\s\+\(.*\)\.[^. ;]\+.*$', '\1', '')
     let cls2 = substitute(a:line2, '^.*\.\([^. ;]\+\).*$', '\1', '')
   endif
 
@@ -2081,6 +2314,8 @@ endfunction
 "   inoreabbr \stdout\ System.out.println("");<Left><Left><Left><C-R>=EatChar('\s')<CR>
 function! EatChar(pat)
    let c = nr2char(getchar())
+   "call input('Pattern: '.a:pat.' '.
+   "      \ ((c =~ a:pat) ? 'Returning empty' : 'Returning: '.char2nr(c)))
    return (c =~ a:pat) ? '' : c
 endfun
 
@@ -2096,7 +2331,7 @@ function! SilentSubstitute(pat, cmd)
   let _search = @/
   try
     let @/ = a:pat
-    silent! exec a:cmd
+    keepjumps silent! exec a:cmd
   finally
     let @/ = _search
   endtry
@@ -2106,7 +2341,7 @@ function! SilentDelete(pat)
   let _search = @/
   try
     let @/ = a:pat
-    silent! exec 'g//d'
+    keepjumps silent! exec 'g//d _'
   finally
     let @/ = _search
   endtry
