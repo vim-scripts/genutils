@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 25-Aug-2003 @ 20:07
-" Requires: Vim-6.0, multvals.vim(3.3)
-" Version: 1.8.1
+" Last Change: 28-Oct-2003 @ 09:43
+" Requires: Vim-6.0 (preferably 6.2), multvals.vim(3.3)
+" Version: 1.9.4
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -13,6 +13,9 @@
 " Description:
 "   - Functions MakeArgumentString(), MakeArgumentList() and CreateArgString()
 "     to work with and pass variable number of arguments to other functions.
+"     There is also an ExtractFuncListing() function that is used by the above
+"     functions to create snippets (see also breakpts.vim, ntservices.vim and
+"     ntprocesses.vim for interesting ideas on how to use this function).
 "	  fu! s:IF(...)
 "	    exec MakeArgumentString('myArgString')
 "   	    exec "call Impl(1, " . myArgString . ")"
@@ -44,7 +47,8 @@
 "   - ShowLinesWithSyntax() function to echo lines with syntax coloring.
 "   - ShiftWordInSpace(), CenterWordInSpace() and
 "     AlignWordWithWordInPreviousLine() utility functions to move words in the
-"     space without changing the width of the field.
+"     space without changing the width of the field. A GetSpacer() function to
+"     return a spacer of specified width.
 "   - A quick-sort functions QSort() that can sort a buffer contents by range
 "     and QSort2() that can sort any arbitrary data and utility compare
 "     methods.  Binary search functions BinSearchForInsert() and
@@ -67,6 +71,7 @@
 "     current buffer in an optimal manner. Ideal to be used when plugins need
 "     to refresh their windows and don't care about preserving the current
 "     contents (which is the most usual case).
+"   - GetPreviewWinnr() function (only on Vim6.2).
 "   - Functions to have persistent data, PutPersistentVar() and
 "     GetPersistentVar(). You don't need to worry about saving in files and
 "     reading them back. To disable, set g:genutilsNoPersist in your vimrc.
@@ -165,8 +170,8 @@ let g:makeArgumentList = 'exec MakeArgumentList()'
 let s:makeArgumentString = ''
 function! MakeArgumentString(...)
   if s:makeArgumentString == ''
-    let s:makeArgumentString = s:StripFunctionHeadAndTail(s:myScriptId.
-	  \ '_makeArgumentString')
+    let s:makeArgumentString = ExtractFuncListing(s:myScriptId.
+	  \ '_makeArgumentString', 0, 0)
   endif
   if a:0 > 0 && a:1 != ''
     return substitute(s:makeArgumentString, '\<argumentString\>', a:1, 'g')
@@ -199,8 +204,8 @@ endfunction
 let s:makeArgumentList = ''
 function! MakeArgumentList(...)
   if s:makeArgumentList == ''
-    let s:makeArgumentList = s:StripFunctionHeadAndTail(s:myScriptId.
-	  \ '_makeArgumentList')
+    let s:makeArgumentList = ExtractFuncListing(s:myScriptId.
+	  \ '_makeArgumentList', 0, 0)
   endif
   if a:0 > 0 && a:1 != ''
     let mkArgLst = substitute(s:makeArgumentList, '\<argumentList\>', a:1, 'g')
@@ -214,6 +219,30 @@ function! MakeArgumentList(...)
   endif
 endfunction
 
+" This function returns the body of the specified function ( the name should be
+"   complete, including any scriptid prefix in case of a script local
+"   function), without the function header and tail. You can also pass in the
+"   number of additional lines to be removed from the head and or tail of the
+"   function.
+function! ExtractFuncListing(funcName, hLines, tLines)
+  let listing = GetVimCmdOutput('func '.a:funcName)
+  let listing = substitute(listing,
+	\ '^\%(\s\|'."\n".'\)*function '.a:funcName.'([^)]*)'."\n", '', '')
+  "let listing = substitute(listing, '\%(\s\|'."\n".'\)*endfunction\%(\s\|'."\n".'\)*$', '', '')
+  " Leave the last newline character.
+  let listing = substitute(listing, '\%('."\n".'\)\@<=\s*endfunction\s*$', '', '')
+  let listing = substitute(listing, '\(\%(^\|'."\n".'\)\s*\)\@<=\d\+',
+	\ '', 'g')
+  if a:hLines > 0
+    let listing = substitute(listing, '^\%([^'."\n".']*'."\n".'\)\{'.
+	  \ a:hLines.'}', '', '')
+  endif
+  if a:tLines > 0
+    let listing = substitute(listing, '\%([^'."\n".']*'."\n".'\)\{'.
+	  \ a:tLines.'}$', '', '')
+  endif
+  return listing
+endfunction
 
 " Useful to collect arguments into a soft-array (see multvals on vim.sf.net)
 "   and then pass them to a function later.
@@ -272,16 +301,6 @@ function! s:_makeArgumentList()
   endwhile
   unlet __argCounter
   unlet __argSeparator
-endfunction
-
-function! s:StripFunctionHeadAndTail(funcName)
-  let listing = GetVimCmdOutput('func '.a:funcName)
-  let listing = substitute(listing,
-	\ '\_s*function '.a:funcName.'()'."\n\\?", '', '')
-  let listing = substitute(listing, 'endfunction\s*$', '', '')
-  let listing = substitute(listing, '\(\%(^\|'."\n".'\)\s*\)\@<=\d\+',
-	\ '', 'g')
-  return listing
 endfunction
 " }}}
 
@@ -441,9 +460,9 @@ endfunction
 " Works like the reverse of the builtin escape() function. Un-escapes only the
 "   specified characters. The chars value directly goes into the []
 "   collection, so it can be anything that is accepted in [].
-function! s:UnEscape(str, chars)
+function! UnEscape(str, chars)
   return substitute(a:str, '\\\@<!\(\\\\\)*\\\([' . a:chars . ']\)',
-	\ '\2\1', 'g')
+	\ '\1\2', 'g')
 endfunction
 
 
@@ -468,29 +487,23 @@ endfunction
 
 " Returns 1 if preview window is open or 0 if not.
 if v:version >= 602
-function! IsPreviewWindowOpen()
+function! GetPreviewWinnr()
   let _eventignore = &eventignore
+  let curWinNr = winnr()
+  let winnr = -1
   try
     set eventignore+=WinLeave,WinEnter
     exec "wincmd P"
+    let winnr = winnr()
   catch /^Vim\%((\a\+)\)\=:E441/
-    return 0
+    " Ignore, winnr is already set to -1.
   finally
+    if winnr() != curWinNr
+      exec curWinNr.'wincmd w'
+    endif
     let &eventignore = _eventignore
   endtry
-  wincmd p
-  return 1
-endfunction
-else
-function! IsPreviewWindowOpen()
-  let v:errmsg = ""
-  silent! exec "wincmd P"
-  if v:errmsg != ""
-    return 0
-  else
-    wincmd p
-    return 1
-  endif
+  return winnr
 endfunction
 endif
 
@@ -680,13 +693,10 @@ let s:myScriptId = s:MyScriptId()
 delfunc s:MyScriptId " Not required any more.
 
 
-""
-"" --- START save/restore position.
-""
+"" --- START save/restore position. {{{
 
 " characters that must be escaped for a regular expression
 let s:escregexp = '[/*^$.~\'
-
 
 " This method tries to save the position along with the line context if
 "   possible. This is like the vim builtin marker. Pass in a unique scriptid
@@ -695,7 +705,6 @@ function! SaveSoftPosition(scriptid)
   let s:startline_{a:scriptid} = getline(".")
   call SaveHardPosition(a:scriptid)
 endfunction
-
 
 function! RestoreSoftPosition(scriptid)
   0
@@ -707,29 +716,24 @@ function! RestoreSoftPosition(scriptid)
   endif
 endfunction
 
-
 function! ResetSoftPosition(scriptid)
   unlet s:startline_{a:scriptid}
 endfunction
-
 
 " A synonym for SaveSoftPosition.
 function! SaveHardPositionWithContext(scriptid)
   call SaveSoftPosition(a:scriptid)
 endfunction
 
-
 " A synonym for RestoreSoftPosition.
 function! RestoreHardPositionWithContext(scriptid)
   call RestoreSoftPosition(a:scriptid)
 endfunction
 
-
 " A synonym for ResetSoftPosition.
 function! ResetHardPositionWithContext(scriptid)
   call ResetSoftPosition(a:scriptid)
 endfunction
-
 
 " Useful when you want to go to the exact (line, col), but marking will not
 "   work, or if you simply don't want to disturb the marks. Pass in a unique
@@ -740,7 +744,6 @@ function! SaveHardPosition(scriptid)
   let s:winline_{a:scriptid} = winline()
 endfunction
 
-
 function! RestoreHardPosition(scriptid)
   " This doesn't take virtual column.
   "call cursor(s:lin_{a:scriptid}, s:col_{a:scriptid})
@@ -749,6 +752,15 @@ function! RestoreHardPosition(scriptid)
   call MoveCurLineToWinLine(s:winline_{a:scriptid})
 endfunction
 
+" Return the line number of the previously saved position for the scriptid.
+function! GetLinePosition(scriptid)
+  return s:lin_{a:scriptid}
+endfunction
+
+" Return the column number of the previously saved position for the scriptid.
+function! GetColPosition(scriptid)
+  return s:col_{a:scriptid}
+endfunction
 
 function! ResetHardPosition(scriptid)
   unlet s:col_{a:scriptid}
@@ -756,15 +768,11 @@ function! ResetHardPosition(scriptid)
   unlet s:winline_{a:scriptid}
 endfunction
 
-
 function! IsPositionSet(scriptid)
   return exists('s:col_' . a:scriptid)
 endfunction
 
-
-""
-"" --- END save/restore position.
-""
+"" --- END save/restore position. }}}
 
 
 
@@ -1429,6 +1437,14 @@ function! EatChar(pat)
    let c = nr2char(getchar())
    return (c =~ a:pat) ? '' : c
 endfun
+
+
+" Can return a spacer from 0 to 80 characters width.
+let s:spacer= "                                                               ".
+      \ "                           "
+function! GetSpacer(width)
+  return strpart(s:spacer, 0, a:width)
+endfunction
 
 
 " Convert Roman numerals to decimal. Doesn't detect format errors.
