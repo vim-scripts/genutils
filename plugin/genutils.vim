@@ -1,15 +1,15 @@
 "
 " Useful buffer, file and window related functions.
 "
-" Author: Hari <hari_vim@yahoo.com>
-" Last Modified: 06-Mar-2002 @ 19:30:22
+" Author: Hari Krishna Dara <hari_vim@yahoo.com>
+" Last Modified: 25-Mar-2002 @ 10:36
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.15
+" Version: 1.0.19
 " Description:
 "   - A scriptlet to pass variable number of arguments to other functions.
 "   - Misc. window/buffer related functions, NumberOfWindows(),
 "     FindWindowForBuffer(), FindBufferForName(), MoveCursorToWindow(),
-"     MoveCurLineToWinLine(), SetupScratchBuffer(),
+"     MoveCurLineToWinLine(), SetupScratchBuffer(), MapAppendCascaded()
 "   - Save/Restore all the window height/width settings to be restored later.
 "   - Save/Restore position in the buffer to be restored later. Works like the
 "     built-in marks feature, but has more to it.
@@ -17,7 +17,15 @@
 "     specified buffer has been closed or the buffer is unloaded. The built-in
 "     autocommands can only notify you *before* the window is closed. You can
 "     use this with the Save/Restore window settings feature to restore the
-"     user windows, after your window is closed.
+"     user windows, after your window is closed. I have used this utility in
+"     selectbuf.vim to restore window dimensions after the browser window is
+"     closed. To add your function to be notified when a window is closed, use
+"     the function:
+"
+"         function! AddNotifyWindowClose(windowTitle, functionName)
+"
+"     There is also a test function called RunNotifyWindowCloseTest() that
+"     demos the usage.
 "   - ShowLinesWithSyntax() function to echo lines with syntax coloring.
 "   - ShiftWordInSpace() a small utility function to move words in the
 "     space without changing the width of the field.
@@ -26,6 +34,22 @@
 "     length.
 "   - A sample function to extract the scriptId of a script.
 "
+"   - Place the following  in your vimrc if you find them useful:
+"
+"       command! DiffOff :call CleanDiffOptions()
+"       
+"       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
+"           \ 's:CmpByLineLength', 1)
+"       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
+"           \ 's:CmpByLineLength', -1)
+"
+"	nnoremap <silent> \ :call ExecMap('\')<CR>
+"
+
+if exists("loaded_genutils")
+  finish
+endif
+let loaded_genutils = 1
 
 " Execute this following variable in your function to make a string containing
 "   all your arguments. The string can be used to pass the variable number of
@@ -45,8 +69,7 @@ let makeArgumentString = "
     \  let argCounter = 1\n
     \  let argumentString = ''\n
     \  while argCounter <= a:0\n
-    \    exec 'let nextArgument = a:' . argCounter\n
-    \    let nextArgument = substitute(nextArgument,
+    \    let nextArgument = substitute(a:{argCounter},
              \ \"'\", \"' . \\\"'\\\" . '\", \"g\")\n
     \    let argumentString = argumentString . \"'\" . nextArgument . \"'\" .
              \ ((argCounter == a:0) ? '' : ', ')\n
@@ -74,16 +97,24 @@ function! NumberOfWindows()
 endfunction
 
 "
-" Find the window number for the buffer passed.
+" Find the window number for the buffer passed. If checkUnlisted is non-zero,
+"   then it searches for the buffer in the unlisted buffers, to work-around
+"   the vim bug that bufnr() doesn't work for unlisted buffers. It also
+"   unprotects any extra back-slashes from the bufferName, for the sake of
+"   comparision with the existing buffer names.
 "
 function! FindWindowForBuffer(bufferName, checkUnlisted)
   let bufno = bufnr(a:bufferName)
   " bufnr() will not find unlisted buffers.
   if bufno == -1 && a:checkUnlisted
     " Iterate over all the open windows for 
+
+    " The window name could be having extra backslashes to protect certain
+    " chars, so first expand them.
+    exec "let bufName = \"" . a:bufferName . "\"" 
     let i = 1
     while winbufnr(i) != -1
-      if bufname(winbufnr(i)) == a:bufferName
+      if bufname(winbufnr(i)) == bufName
         return i;
       endif
       let i = i + 1
@@ -143,40 +174,112 @@ function! SetupScratchBuffer()
 endfunction
 
 
+" Turns off those options that are set by diff to the current window.
+"   Also removes the 'hor' option from scrollopt (which is a global option).
+" Better alternative would be to close the window and reopen the buffer in a
+"   new window. 
+function! CleanDiffOptions()
+  setlocal nodiff
+  setlocal noscrollbind
+  setlocal scrollopt-=hor
+  setlocal wrap
+  setlocal foldmethod=manual
+  setlocal foldcolumn=0
+endfunction
+
+
+" This function is an alternative to exists() function, for those odd array
+"   index names for which the built-in function fails. The var should be
+"   accessible to this functions, so it should be a global variable.
+"     if ArrayVarExists("array", id)
+"       let val = array{id}
+"     endif
+function! ArrayVarExists(varName, index)
+  let v:errmsg = ""
+  silent! exec "let test = " . a:varName . "{a:index}"
+  if !exists("test") || test == ""
+    return 0
+  endif
+  return 1
+endfunction
+
+
+" Returns 1 if preview window is open or 0 if not.
+function! IsPreviewWindowOpen()
+  let v:errmsg = ""
+  silent! exec "wincmd P"
+  if v:errmsg != ""
+    return 0
+  else
+    wincmd p
+    return 1
+  endif
+endfunction
+
+
 "
-" Saves the heights of the currently open windows for restoring later.
+" Saves the heights and widths of the currently open windows for restoring
+"   later.
 "
 function! SaveWindowSettings()
-  let s:savedWindowSettings = ""
-  let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",",
-          \ NumberOfWindows())
-  let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",", &lines)
-  let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",", &columns)
-  let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",", winnr())
-  let i = 1
-  while winbufnr(i) != -1
-    let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",",
-            \ winheight(i))
-    let s:savedWindowSettings = MvAddElement(s:savedWindowSettings, ",",
-            \ winwidth(i))
-    let i = i + 1
-  endwhile
-  "let g:savedWindowSettings = s:savedWindowSettings " Debug.
+  call SaveWindowSettings2(s:myScriptId, 1)
 endfunction
+
 
 "
 " Restores the heights of the windows from the information that is saved by
 "  SaveWindowSettings().
 "
 function! RestoreWindowSettings()
-  if ! exists("s:savedWindowSettings")
+  call RestoreWindowSettings2(s:myScriptId)
+endfunction
+
+
+function! ResetWindowSettings()
+  call RestoreWindowSettings2(s:myScriptId)
+endfunction
+
+
+" Same as SaveWindowSettings, but uses the passed in scriptid to create a
+"   private copy for the calling script. Pass in a unique scriptid to avoid
+"   conflicting with other callers. If overwrite is zero and if the settings
+"   are already stored for the passed in sid, it will overwriting previously
+"   saved settings.
+function! SaveWindowSettings2(sid, overwrite)
+  if ArrayVarExists("s:winSettings", a:sid) && ! a:overwrite
     return
   endif
 
-  call MvIterCreate(s:savedWindowSettings, ",", "savedWindowSettings")
+  let s:winSettings{a:sid} = ""
+  let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",",
+          \ NumberOfWindows())
+  let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",", &lines)
+  let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",", &columns)
+  let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",", winnr())
+  let i = 1
+  while winbufnr(i) != -1
+    let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",",
+            \ winheight(i))
+    let s:winSettings{a:sid} = MvAddElement(s:winSettings{a:sid}, ",",
+            \ winwidth(i))
+    let i = i + 1
+  endwhile
+  "let g:savedWindowSettings = s:winSettings{a:sid} " Debug.
+endfunction
+
+
+" Same as RestoreWindowSettings, but uses the passed in scriptid to get the
+"   settings.
+function! RestoreWindowSettings2(sid)
+  "if ! exists("s:winSettings" . a:sid)
+  if ! ArrayVarExists("s:winSettings", a:sid)
+    return
+  endif
+
+  call MvIterCreate(s:winSettings{a:sid}, ",", "savedWindowSettings")
   let nWindows = MvIterNext("savedWindowSettings")
   if nWindows != NumberOfWindows()
-    unlet s:savedWindowSettings
+    unlet s:winSettings{a:sid}
     call MvIterDestroy("savedWindowSettings")
     return
   endif
@@ -202,9 +305,9 @@ function! RestoreWindowSettings()
 endfunction
 
 
-function! ResetWindowSettings()
-  if exists("s:savedWindowSettings")
-    unlet s:savedWindowSettings
+function! ResetWindowSettings2(sid)
+  if ! ArrayVarExists("s:winSettings", a:sid)
+    unlet s:winSettings{a:sid}
   endif
 endfunction
 
@@ -237,6 +340,7 @@ function! OnMS()
        \ has("win95")
 endfunction
 
+
 function! PathIsAbsolute(path)
   let absolute=0
   if has("unix") || OnMS()
@@ -257,9 +361,11 @@ function! PathIsAbsolute(path)
   return absolute
 endfunction
 
+
 function! PathIsFileNameOnly(path)
   return (match(a:path, "\\") < 0) && (match(a:path, "/") < 0)
 endfunction
+
 
 " Copy this method into your script and rename it to find the script id of the
 "   current script.
@@ -269,6 +375,7 @@ function! SampleScriptIdFunction()
   unmap <SID>xx
   return substitute(s:sid, "xx$", "", "")
 endfunction
+let s:myScriptId = SampleScriptIdFunction()
 
 
 ""
@@ -280,7 +387,8 @@ let s:escregexp = '/*^$.~\'
 
 
 " This method tries to save the position along with the line context if
-"   possible. This is like the vim builtin marker. Pass in a unique scriptid.
+"   possible. This is like the vim builtin marker. Pass in a unique scriptid
+"   to avoid conflicting with other callers.
 function! SaveSoftPosition(scriptid)
   let s:startline_{a:scriptid} = getline(".")
   call SaveHardPosition(a:scriptid)
@@ -361,9 +469,13 @@ endfunction
 "   removed, so if you are still interested, you need to register again.
 "
 function! AddNotifyWindowClose(windowTitle, functionName)
+  " The window name could be having extra backslashes to protect certain
+  " chars, so first expand them.
+  exec "let bufName = \"" . a:windowTitle . "\"" 
+
   " Make sure there is only one entry per window title.
   if exists("s:notifyWindowTitles") && s:notifyWindowTitles != ""
-    call RemoveNotifyWindowClose(a:windowTitle)
+    call RemoveNotifyWindowClose(bufName)
   endif
 
   if !exists("s:notifyWindowTitles")
@@ -372,9 +484,8 @@ function! AddNotifyWindowClose(windowTitle, functionName)
     let s:notifyWindowFunctions = ""
   endif
 
-  let s:notifyWindowTitles = MvAddElement(s:notifyWindowTitles, ":",
-          \ a:windowTitle)
-  let s:notifyWindowFunctions = MvAddElement(s:notifyWindowFunctions, ":",
+  let s:notifyWindowTitles = MvAddElement(s:notifyWindowTitles, ";", bufName)
+  let s:notifyWindowFunctions = MvAddElement(s:notifyWindowFunctions, ";",
           \ a:functionName)
 
   let g:notifyWindowTitles = s:notifyWindowTitles " Debug.
@@ -389,16 +500,20 @@ endfunction
 
 
 function! RemoveNotifyWindowClose(windowTitle)
+  " The window name could be having extra backslashes to protect certain
+  " chars, so first expand them.
+  exec "let bufName = \"" . a:windowTitle . "\"" 
+
   if !exists("s:notifyWindowTitles")
     return
   endif
 
-  if MvContainsElement(s:notifyWindowTitles, ":", a:windowTitle)
-    let index = MvIndexOfElement(s:notifyWindowTitles, ":", a:windowTitle)
-    let s:notifyWindowTitles = MvRemoveElementAt(s:notifyWindowTitles, ":",
+  if MvContainsElement(s:notifyWindowTitles, ";", bufName)
+    let index = MvIndexOfElement(s:notifyWindowTitles, ";", bufName)
+    let s:notifyWindowTitles = MvRemoveElementAt(s:notifyWindowTitles, ";",
             \ index)
     let s:notifyWindowFunctions = MvRemoveElementAt(s:notifyWindowFunctions,
-            \ ":", index)
+            \ ";", index)
 
     if s:notifyWindowTitles == ""
       unlet s:notifyWindowTitles
@@ -425,7 +540,7 @@ function! CheckWindowClose()
   while winbufnr(i) != -1
     let bufname = bufname(winbufnr(i))
     if bufname != ""
-      let currentWindows = MvAddElement(currentWindows, ":", bufname)
+      let currentWindows = MvAddElement(currentWindows, ";", bufname)
     endif
     let i = i+1
   endwhile
@@ -437,22 +552,22 @@ function! CheckWindowClose()
   " Take a copy and modify these if needed, as we are not supposed to modify
   "   the main arrays while iterating over them.
   let processedElements = ""
-  call MvIterCreate(s:notifyWindowTitles, ":", "NotifyWindowClose")
+  call MvIterCreate(s:notifyWindowTitles, ";", "NotifyWindowClose")
   while MvIterHasNext("NotifyWindowClose")
     let nextWin = MvIterNext("NotifyWindowClose")
-    if ! MvContainsElement(currentWindows, ":", nextWin)
-      let funcName = MvElementAt(s:notifyWindowFunctions, ":", i)
+    if ! MvContainsElement(currentWindows, ";", nextWin)
+      let funcName = MvElementAt(s:notifyWindowFunctions, ";", i)
       let cmd = "call " . funcName . "(\"" . nextWin . "\")"
       "call input("cmd: " . cmd)
       exec cmd
 
       " Remove these entries as these are already processed.
-      let processedElements = MvAddElement(processedElements, ":", nextWin)
+      let processedElements = MvAddElement(processedElements, ";", nextWin)
     endif
   endwhile
   call MvIterDestroy("NotifyWindowClose")
 
-  call MvIterCreate(processedElements, ":", "NotifyWindowClose")
+  call MvIterCreate(processedElements, ";", "NotifyWindowClose")
   while MvIterHasNext("NotifyWindowClose")
     let nextWin = MvIterNext("NotifyWindowClose")
     call RemoveNotifyWindowClose(nextWin)
@@ -474,7 +589,7 @@ endfunction
 "  call input("notifyWindowFunctions: " . s:notifyWindowFunctions)
 "  au WinEnter
 "  split b
-"  call input("Starting the tests:")
+"  call input("Starting the tests, you should see two notifications:")
 "  quit
 "  quit
 "  quit
@@ -490,14 +605,14 @@ endfunction
 "
 " TODO: For large ranges, the cmd can become too big, so make it one cmd per
 "         line.
-" Originally,
-" From: Gary Holloway <gary@castandcrew.com>
-" Date: Wed, 16 Jan 2002 14:31:56 -0800
-"
 " Display the given line(s) from the current file in the command area (i.e.,
 " echo), using that line's syntax highlighting (i.e., WYSIWYG).
 "
 " If no line number is given, display the current line.
+"
+" Originally,
+" From: Gary Holloway <gary@castandcrew.com>
+" Date: Wed, 16 Jan 2002 14:31:56 -0800
 "
 function! ShowLinesWithSyntax() range
   " This makes sure we start (subsequent) echo's on the first line in the
@@ -594,21 +709,41 @@ function! ShiftWordInSpace(dir)
 endfunction
 
 
-"nnoremap <silent> \ :call ExecMap('\')<CR>
-"function! ExecMap(prefix)
-"  let map = input("Enter Map: ")
-"  exec "normal " . a:prefix . map
-"endfunction
+" Reads a normal mode mapping at the command line and executes it with the
+"   given prefix.
+function! ExecMap(prefix)
+  let map = input("Enter Map: ")
+  if map != ""
+    exec "normal " . a:prefix . map
+  endif
+endfunction
+
+
+" If lhs is already mapped, this function makes sure rhs is appended to it
+"   instead of overwriting it.
+" mapMode is used to prefix to "oremap" and used as the map command. E.g., if
+"   mapMode is 'n', then the function call results in the execution of noremap
+"   command.
+function! MapAppendCascaded(lhs, rhs, mapMode)
+
+  " Determine the map mode from the map command.
+  let mapChar = strpart(a:mapMode, 0, 1)
+
+  " Check if this is already mapped.
+  let oldrhs = maparg(a:lhs, mapChar)
+  if oldrhs != ""
+    let self = oldrhs
+  else
+    let self = a:lhs
+  endif
+  "echomsg a:mapMode . "oremap" . " " . a:lhs . " " . self . a:rhs
+  exec a:mapMode . "oremap" a:lhs self . a:rhs
+endfunction
 
 
 "" 
 "" Sort utilities.
 ""
-
-command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
-    \ 's:CmpByLineLength', 1)
-command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
-    \ 's:CmpByLineLength', -1)
 
 "
 " Comapare functions.
@@ -619,7 +754,7 @@ function! s:CmpByLineLength(line1, line2, direction)
 endfunction
 
 ""
-"" Sort infrastructure.
+"" Sort infrastructure. {{{
 ""
 
 "
@@ -693,3 +828,24 @@ function! s:QSortR(start, end, cmp, direction)
     endif
   endif
 endfunction
+
+""" END: Sort InfraSetup. }}}
+
+
+" Eats character if it matches the given pattern.
+"
+" Originally,
+" From: Benji Fisher <fisherbb@bc.edu>
+" Date: Mon, 25 Mar 2002 15:05:14 -0500
+"
+" Based on Bram's idea of eating a character while type <Space> to expand an
+"   abbreviation. This solves the problem with abbreviations, where we are
+"   left with an extra space after the expansion.
+" Ex:
+"   inoreabbr \date\ <C-R>=strftime("%d-%b-%Y")<CR><C-R>=EatChar('\s')<CR>
+function! EatChar(pat)
+   let c = nr2char(getchar())
+   return (c =~ a:pat) ? '' : c
+endfun
+
+" vim6:fdm=marker
