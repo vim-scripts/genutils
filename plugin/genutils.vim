@@ -2,9 +2,12 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 26-Nov-2002 @ 11:06
+" Last Modified: 03-Dec-2002 @ 13:16
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.2.8
+" Version: 1.3.0
+" Licence: This program is free software; you can redistribute it and/or
+"          modify it under the terms of the GNU General Public License.
+"          See http://www.gnu.org/copyleft/gpl.txt 
 " Download From:
 "     http://vim.sourceforge.net/scripts/script.php?script_id=197
 " Description:
@@ -318,7 +321,8 @@ function! ArrayVarExists(varName, index)
 endfunction
 
 
-" Works like the reverse of the builtin escape() function.
+" Works like the reverse of the builtin escape() function. De-escapes all the
+" escaped characters.
 function! DeEscape(val)
   let val = substitute(a:val, '"', '\\"', 'g')
   exec "let val = \"" . val . "\"" 
