@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 28-Oct-2003 @ 09:43
-" Requires: Vim-6.0 (preferably 6.2), multvals.vim(3.3)
-" Version: 1.9.4
+" Last Change: 12-Dec-2003 @ 09:56
+" Requires: Vim-6.0 (preferably 6.2), multvals.vim(3.4)
+" Version: 1.10.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -135,6 +135,7 @@
 " TODO:
 "   - fnamemodify() on Unix doesn't expand to full name if the filename doesn't
 "     really exist on the filesystem.
+"
 "   - Support specifying arguments (with spaces) enclosed in "" or '' for
 "     makeArgumentString. Just combine the arguments that are between "" or ''
 "     and strip the quotes off.
@@ -143,7 +144,14 @@
 if exists("loaded_genutils")
   finish
 endif
-let loaded_genutils = 1
+if !exists("loaded_multvals")
+  runtime plugin/multvals.vim
+endif
+if !exists("loaded_multvals") || loaded_multvals < 304
+  echomsg "genutils: You need to have multvals version 3.4 or higher"
+  finish
+endif
+let loaded_genutils = 110
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -1495,10 +1503,12 @@ endfun
 " END: Roman2Decimal }}}
 
 
-" BEGIN: Relative path {{{
-" Find common path component of two filenames, based on the tread, "computing
-" relative path".
+" Based on the tread, "computing relative path".
 " Date: Mon, 29 Jul 2002 21:30:56 +0200 (CEST)
+" BEGIN: Relative path {{{
+" Find common path component of two filenames.
+" Ex:
+"   CommonPath('/a/b/c/d.e', '/a/b/f/g/h.i') => '/a/b/'
 function! CommonPath(path1, path2)
   let path1 = CleanupFileName(a:path1)
   let path2 = CleanupFileName(a:path2)
@@ -1506,9 +1516,12 @@ function! CommonPath(path1, path2)
 endfunction
 
 
+" Find common string component of two strings.
+" Ex:
+"   CommonString('abcde', 'abfghi') => 'ab'
 function! CommonString(str1, str2)
-  let str1 = CleanupFileName(a:str1)
-  let str2 = CleanupFileName(a:str2)
+  let str1 = a:str1
+  let str2 = a:str2
   if str1 == str2
     return str1
   endif
@@ -1519,21 +1532,24 @@ function! CommonString(str1, str2)
   return strpart(str1, 0, n)
 endfunction
 
-
+" Find the relative path of tgtFile from the directory of srcFile.
+" Ex:
+"   RelPathFromFile('/a/b/c/d.html', '/a/b/e/f.html') => '../f/g.html'
 function! RelPathFromFile(srcFile, tgtFile)
-  return RelPathFromDir(fnamemodify(a:srcFile, ':r'), a:tgtFile)
+  return RelPathFromDir(fnamemodify(a:srcFile, ':h'), a:tgtFile)
 endfunction
 
-
+" Find the relative path of tgtFile from the srcDir.
+" Ex:
+"   RelPathFromDir('/a/b/c/d', '/a/b/e/f/g.html') => '../../e/f/g.html'
 function! RelPathFromDir(srcDir, tgtFile)
   let cleanDir = CleanupFileName(a:srcDir)
   let cleanFile = CleanupFileName(a:tgtFile)
   let cmnPath = CommonPath(cleanDir, cleanFile)
   let shortDir = strpart(cleanDir, strlen(cmnPath))
   let shortFile = strpart(cleanFile, strlen(cmnPath))
-  let relPath = substitute(substitute(shortDir, '[^/]\+$', '', ''),
-	\ '[^/]\+', '..', 'g')
-  return relPath . shortFile
+  let relPath = substitute(shortDir, '[^/]\+', '..', 'g')
+  return relPath . '/' . shortFile
 endfunction
 
 " END: Relative path }}}
