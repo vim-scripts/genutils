@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 09-Aug-2002 @ 19:51
+" Last Modified: 26-Nov-2002 @ 11:06
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.1.0
+" Version: 1.2.8
 " Download From:
 "     http://vim.sourceforge.net/scripts/script.php?script_id=197
 " Description:
@@ -34,9 +34,11 @@
 "   - ShiftWordInSpace(), CenterWordInSpace() and
 "     AlignWordWithWordInPreviousLine() utility functions to move words in the
 "     space without changing the width of the field.
-"   - A quick-sort function that can sort a buffer contents by range. Adds
-"     utility commands SortByLength and RSortByLength to sort contents by line
-"     length.
+"   - A quick-sort functions QSort() that can sort a buffer contents by range
+"     and QSort2() that can sort any arbitrary data and utility compare
+"     methods.  Binary search functions BinSearchForInsert() and
+"     BinSearchForInsert2() to find the location for a newline to be inserted
+"     in an already sorted buffer or arbitrary data.
 "   - A useful ExecMap() function to facilitate recovering from typing errors
 "     in normal mode mappings (see below for examples). Normally when you make
 "     mistakes in typing normal mode commands, vim beeps at you and aborts the
@@ -45,7 +47,8 @@
 "   - A sample function to extract the scriptId of a script.
 "   - New CommonPath() function to extract the common part of two paths, and
 "     RelPathFromFile() and RelPathFromDir() to find relative paths (useful
-"     HTML href's)
+"     HTML href's). A side effect is the CommonString() function to find the
+"     common string of two strings.
 "   - Functions to have persistent data, PutPersistentVar() and
 "     GetPersistentVar(). You don't need to worry about saving in files and
 "     reading them back. To disable, set g:genutilsNoPersist in your vimrc.
@@ -75,14 +78,16 @@
 "	endfunction
 "     <<<<t.vim>>>>
 "
-"   - Place the following  in your vimrc if you find them useful:
+"   - Place the following in your vimrc if you find them useful:
 "
 "       command! DiffOff :call CleanDiffOptions()
 "       
 "       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
-"           \ 's:CmpByLineLength', 1)
+"           \ 's:CmpByLengthNname', 1)
 "       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
-"           \ 's:CmpByLineLength', -1)
+"           \ 's:CmpByLineLengthNname', -1)
+"       command! -nargs=0 -range=% SortJavaImports <line1>,<line2>call QSort(
+"           \ 's:CmpJavaImports', 1)
 "
 "	nnoremap \ :call ExecMap('\')<CR>
 "	nnoremap _ :call ExecMap('_')<CR>
@@ -154,20 +159,42 @@ let makeArgumentList = "
     \ "
 
 
-" You should make sure that the separator doesn't exist in the argList. You
-" can use the return value the same as the argumentString created by the
-" "exec g:makeArgumentString" above.
+" Useful to collect arguments into a soft-array (see multvals on vim.sf.net)
+"   and then pass them to a function later.
+" You should make sure that the separator itself doesn't exist in the
+"   arguments. You can use the return value same as the way argumentString
+"   created by the "exec g:makeArgumentString" above is used.
 " Usage:
 "     let args = 'a b c' 
-"     exec "call F(" . ConvertToArgString(args, ' ') . ")"
+"     exec "call F(" . CreateArgString(args, ' ') . ")"
 function! CreateArgString(argList, sep)
-  let argString = a:argList
-  if a:sep != "'"
-    let argString = substitute(argString, "'", "' . \"'\" . '", 'g')
-  endif
-  let argString = substitute(argString, a:sep . '\?\([^' . a:sep . ']*\)',
-	\ "'\\1', ", 'g')
+  call MvIterCreate(a:argList, a:sep, 'CreateArgString')
+  let argString = "'"
+  while MvIterHasNext('CreateArgString')
+    let nextArg = MvIterNext('CreateArgString')
+    if a:sep != "'"
+      let nextArg = substitute(nextArg, "'", "' . \"'\" . '", 'g')
+    endif
+    let argString = argString . nextArg . "', '"
+  endwhile
+  let argString = strpart(argString, 0, strlen(argString) - 3)
+  call MvIterDestroy('CreateArgString')
   return argString
+endfunction
+
+
+" Useful function to debug passing arguments to functions. See exactly what
+"   you receive on the other side.
+" Ex: :exec 'call DebugShowArgs('. CreateArgString("a 'b' c", ' ') . ')' 
+function! DebugShowArgs(...)
+  let i = 0
+  let argString = ''
+  while i < a:0
+    let argString = argString . a:{i + 1} . ', '
+    let i = i + 1
+  endwhile
+  let argString = strpart(argString, 0, strlen(argString) - 2)
+  call input("Args: " . argString)
 endfunction
 
 
@@ -190,7 +217,7 @@ endfunction
 "   comparision with the existing buffer names.
 "
 function! FindWindowForBuffer(bufferName, checkUnlisted)
-  let bufno = bufnr(a:bufferName)
+  let bufno = bufnr('^' . a:bufferName . '$')
   " bufnr() will not find unlisted buffers.
   if bufno == -1 && a:checkUnlisted
     " Iterate over all the open windows for 
@@ -212,7 +239,7 @@ endfunction
 " Returns the buffer number of the given fileName if it is already loaded.
 " Works around the bug in bufnr().
 function! FindBufferForName(fileName)
-  let i = bufnr(a:fileName)
+  let i = bufnr('^' . a:fileName . '$')
   if i != -1
     return i
   endif
@@ -283,7 +310,8 @@ endfunction
 function! ArrayVarExists(varName, index)
   let v:errmsg = ""
   silent! exec "let test = " . a:varName . "{a:index}"
-  if !exists("test") || test == ""
+  if !exists("test") || v:errmsg != ""
+    let v:errmsg = ""
     return 0
   endif
   return 1
@@ -292,7 +320,8 @@ endfunction
 
 " Works like the reverse of the builtin escape() function.
 function! DeEscape(val)
-  exec "let val = \"" . a:val . "\"" 
+  let val = substitute(a:val, '"', '\\"', 'g')
+  exec "let val = \"" . val . "\"" 
   return val
 endfunction
 
@@ -485,13 +514,13 @@ endfunction
 
 " Copy this method into your script and rename it to find the script id of the
 "   current script.
-function! SampleScriptIdFunction()
+function! s:SampleScriptIdFunction()
   map <SID>xx <SID>xx
   let s:sid = maparg("<SID>xx")
   unmap <SID>xx
   return substitute(s:sid, "xx$", "", "")
 endfunction
-let s:myScriptId = SampleScriptIdFunction()
+let s:myScriptId = s:SampleScriptIdFunction()
 
 
 ""
@@ -567,6 +596,12 @@ function! ResetHardPosition(scriptid)
   unlet s:lin_{a:scriptid}
   unlet s:winline_{a:scriptid}
 endfunction
+
+
+function! IsPositionSet(scriptid)
+  return exists('s:col_' . a:scriptid)
+endfunction
+
 
 ""
 "" --- END save/restore position.
@@ -646,7 +681,7 @@ endfunction
 
 
 function! CheckWindowClose()
-  if !exists("s:notifyWindowTitles")
+  if !exists("s:notifyWindowTitles") || s:notifyWindowTitles == ""
     return
   endif
 
@@ -656,7 +691,9 @@ function! CheckWindowClose()
   while winbufnr(i) != -1
     let bufname = bufname(winbufnr(i))
     if bufname != ""
-      let currentWindows = MvAddElement(currentWindows, ";", bufname)
+      " For performance reasons.
+      "let currentWindows = MvAddElement(currentWindows, ";", bufname)
+      let currentWindows = currentWindows . bufname . ";"
     endif
     let i = i+1
   endwhile
@@ -994,25 +1031,56 @@ function! MapAppendCascaded(lhs, rhs, mapMode)
 endfunction
 
 
-"" 
-"" Sort utilities.
+
+"" START: Sorting support. {{{
 ""
 
 "
 " Comapare functions.
 "
 
-function! s:CmpByLineLength(line1, line2, direction)
-  let len1 = strlen(a:line1)
-  let len2 = strlen(a:line2)
-  if (len1 == len2)
-    return s:CmpByName(a:line1, a:line2, a:direction)
-  else
-    return a:direction * (len1 - len2)
+function! s:CmpByLineLengthNname(line1, line2, direction)
+  let cmp = s:CmpByLength(a:line1, a:line2, a:direction)
+  if cmp == 0
+    let cmp = s:CmpByString(a:line1, a:line2, a:direction)
   endif
+  return cmp
 endfunction
 
-function! s:CmpByName(line1, line2, direction)
+
+function! s:CmpByLength(line1, line2, direction)
+  let len1 = strlen(a:line1)
+  let len2 = strlen(a:line2)
+  return a:direction * (len1 - len2)
+endfunction
+
+" Compare first by name and then by length.
+" Useful for sorting Java imports.
+function! s:CmpJavaImports(line1, line2, direction)
+  " FIXME: Simplify this.
+  if stridx(a:line1, '.') == -1
+    let pkg1 = ''
+    let cls1 = substitute(a:line1, '.* \(^[ ]\+\)', '\1', '')
+  else
+    let pkg1 = substitute(a:line1, '^\(.*\.\)[^. ;]\+.*$', '\1', '')
+    let cls1 = substitute(a:line1, '^.*\.\([^. ;]\+\).*$', '\1', '')
+  endif
+  if stridx(a:line2, '.') == -1
+    let pkg2 = ''
+    let cls2 = substitute(a:line2, '.* \(^[ ]\+\)', '\1', '')
+  else
+    let pkg2 = substitute(a:line2, '^\(.*\.\)[^. ;]\+.*$', '\1', '')
+    let cls2 = substitute(a:line2, '^.*\.\([^. ;]\+\).*$', '\1', '')
+  endif
+
+  let cmp = s:CmpByString(pkg1, pkg2, a:direction)
+  if cmp == 0
+    let cmp = s:CmpByLength(cls1, cls2, a:direction)
+  endif
+  return cmp
+endfunction
+
+function! s:CmpByString(line1, line2, direction)
   if a:line1 < a:line2
     return -a:direction
   elseif a:line1 > a:line2
@@ -1035,28 +1103,46 @@ function! s:CmpByNumber(line1, line2, direction)
   endif
 endfunction
 
-"" START: Sorting support. {{{
-""
-
 "
 " To Sort a range of lines, pass the range to QSort() along with the name of a
 " function that will compare two lines.
 "
-function! QSort(cmp,direction) range
-  call s:QSortR(a:firstline, a:lastline, a:cmp, a:direction)
+function! QSort(cmp, direction) range
+  call s:QSortR(a:firstline, a:lastline, a:cmp, a:direction,
+	\ 's:BufLineAccessor', 's:BufLineSwapper', '')
 endfunction
 
+" A more generic sort routine, that will let you provide your own accessor and
+"   swapper, so that you can extend the sorting to something beyond the default
+"   buffer lines.
+function! QSort2(start, end, cmp, direction, accessor, swapper, context)
+  call s:QSortR(a:start, a:end, a:cmp, a:direction, a:accessor, a:swapper,
+	\ a:context)
+endfunction
+
+" The default swapper that swaps lines in the current buffer.
+function! s:BufLineSwapper(line1, line2, context)
+  let str2 = getline(a:line1)
+  call setline(a:line1, getline(a:line2))
+  call setline(a:line2, str2)
+endfunction
+
+" The default accessor that returns lines from the current buffer.
+function! s:BufLineAccessor(line, context)
+  return getline(a:line)
+endfunction
 
 "
-" Sort lines.  SortR() is called recursively.
+" Sort lines.  QSortR() is called recursively.
 "
-function! s:QSortR(start, end, cmp, direction)
+function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
   if a:end > a:start
     let low = a:start
     let high = a:end
 
     " Arbitrarily establish partition element at the midpoint of the data.
-    let midStr = getline((a:start + a:end) / 2)
+    exec "let midStr = " . a:accessor . "(" . ((a:start + a:end) / 2) .
+	  \ ", a:context)"
 
     " Loop through the data until indices cross.
     while low <= high
@@ -1064,7 +1150,7 @@ function! s:QSortR(start, end, cmp, direction)
       " Find the first element that is greater than or equal to the partition
       "   element starting from the left Index.
       while low < a:end
-        let str = getline(low)
+	exec "let str = " . a:accessor . "(" . low .  ", a:context)"
         exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
         if result < 0
           let low = low + 1
@@ -1076,7 +1162,7 @@ function! s:QSortR(start, end, cmp, direction)
       " Find an element that is smaller than or equal to the partition element
       "   starting from the right Index.
       while high > a:start
-        let str = getline(high)
+	exec "let str = " . a:accessor . "(" . high .  ", a:context)"
         exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
         if result > 0
           let high = high - 1
@@ -1088,9 +1174,7 @@ function! s:QSortR(start, end, cmp, direction)
       " If the indexes have not crossed, swap.
       if low <= high
         " Swap lines low and high.
-        let str2 = getline(high)
-        call setline(high, getline(low))
-        call setline(low, str2)
+	exec "call " . a:swapper . "(" . high . ", " . low . ", a:context)"
         let low = low + 1
         let high = high - 1
       endif
@@ -1099,15 +1183,45 @@ function! s:QSortR(start, end, cmp, direction)
     " If the right index has not reached the left side of data must now sort
     "   the left partition.
     if a:start < high
-      call s:QSortR(a:start, high, a:cmp, a:direction)
+      call s:QSortR(a:start, high, a:cmp, a:direction, a:accessor, a:swapper,
+	    \ a:context)
     endif
 
     " If the left index has not reached the right side of data must now sort
     "   the right partition.
     if low < a:end
-      call s:QSortR(low, a:end, a:cmp, a:direction)
+      call s:QSortR(low, a:end, a:cmp, a:direction, a:accessor, a:swapper,
+	    \ a:context)
     endif
   endif
+endfunction
+
+" Return the line number where given line can be inserted in the current
+"   buffer. This can also be interpreted as the line in the current buffer
+"   after which the new line should go.
+" Assumes that the lines are already sorted in the given direction using the
+"   given comparator.
+function! BinSearchForInsert(start, end, line, cmp, direction)
+  return BinSearchForInsert2(a:start, a:end, a:line, a:cmp, a:direction,
+	\ 's:BufLineAccessor', '')
+endfunction
+
+" A more generic implementation which doesn't restrict the search to a buffer.
+function! BinSearchForInsert2(start, end, line, cmp, direction, accessor,
+      \ context)
+  let start = a:start - 1
+  let end = a:end
+  while start < end
+    let middle = (start + end + 1) / 2
+    exec "let str = " . a:accessor . "(" . middle .  ", a:context)"
+    exec "let result = " . a:cmp . "(str, a:line, " . a:direction . ")"
+    if result < 0
+      let start = middle
+    else
+      let end = middle - 1
+    endif
+  endwhile
+  return start
 endfunction
 
 """ END: Sorting support. }}}
@@ -1185,14 +1299,21 @@ endfun
 function! CommonPath(path1, path2)
   let path1 = CleanupFileName(a:path1)
   let path2 = CleanupFileName(a:path2)
-  if path1 == path2
-    return path1
+  return CommonString(path1, path2)
+endfunction
+
+
+function! CommonString(str1, str2)
+  let str1 = CleanupFileName(a:str1)
+  let str2 = CleanupFileName(a:str2)
+  if str1 == str2
+    return str1
   endif
   let n = 0
-  while path1[n] == path2[n]
+  while str1[n] == str2[n]
     let n = n+1
   endwhile
-  return strpart(path1, 0, n)
+  return strpart(str1, 0, n)
 endfunction
 
 
@@ -1218,8 +1339,10 @@ endfunction
 if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
 
 " Make sure the '!' option to store global variables that are upper cased are
-" stored in viminfo file.
-set viminfo+=!
+"   stored in viminfo file. Make sure it is the first option, so that it will
+"   not interfere with the 'n' option ("Todd J. Cosgrove"
+"     <todd dot cosgrove at softechnics dot com>).
+set viminfo^=!
 
 " The pluginName and persistentVar have to be unique and are case insensitive.
 " Should be called from VimLeavePre. This simply creates a global variable which
