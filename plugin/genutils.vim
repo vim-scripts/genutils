@@ -1,15 +1,15 @@
 "
 " Useful buffer, file and window related functions.
 "
-" Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 03-Dec-2002 @ 13:16
+" Author: Hari Krishna Dara <hari_vim at yahoo dot com>
+" Last Change: 21-Mar-2003 @ 19:31PM
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.3.0
+" Version: 1.4.12
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
 " Download From:
-"     http://vim.sourceforge.net/scripts/script.php?script_id=197
+"     http://www.vim.org/script.php?script_id=197
 " Description:
 "   - Scriptlets, g:makeArgumentString and g:makeArgumentList, and a function
 "     CreateArgString() to work with and pass variable number of arguments to
@@ -42,16 +42,14 @@
 "     methods.  Binary search functions BinSearchForInsert() and
 "     BinSearchForInsert2() to find the location for a newline to be inserted
 "     in an already sorted buffer or arbitrary data.
-"   - A useful ExecMap() function to facilitate recovering from typing errors
-"     in normal mode mappings (see below for examples). Normally when you make
-"     mistakes in typing normal mode commands, vim beeps at you and aborts the
-"     command. But this method allows you to continue typing the command and
-"     even backspace on errors.
+"   - ExecMap function has now been separated as a plugin called execmap.vim.
 "   - A sample function to extract the scriptId of a script.
 "   - New CommonPath() function to extract the common part of two paths, and
 "     RelPathFromFile() and RelPathFromDir() to find relative paths (useful
 "     HTML href's). A side effect is the CommonString() function to find the
 "     common string of two strings.
+"   - UnEscape() and DeEscape() functions to reverse what built-in escape()
+"     does.
 "   - Functions to have persistent data, PutPersistentVar() and
 "     GetPersistentVar(). You don't need to worry about saving in files and
 "     reading them back. To disable, set g:genutilsNoPersist in your vimrc.
@@ -81,19 +79,23 @@
 "	endfunction
 "     <<<<t.vim>>>>
 "
+"   - A function to emulate the default Vim behavior for |timestamp| changes.
+"     It also provides hooks to get call backs before and after handling the
+"     default FileChangedShell autocommand (effectively splitting it into a
+"     Pre and a Post event). Suggested usage is to use AddToFCShellPre() or
+"     AddToFCShell() and either install a default event handling mechanism for
+"     all files by calling DefFCShellInstall() or create your own autocommand on
+"     a matching pattern to call DefFileChangedShell() function.
 "   - Place the following in your vimrc if you find them useful:
 "
 "       command! DiffOff :call CleanDiffOptions()
 "       
 "       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
-"           \ 's:CmpByLengthNname', 1)
+"           \ 'CmpByLengthNname', 1)
 "       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
-"           \ 's:CmpByLineLengthNname', -1)
+"           \ 'CmpByLineLengthNname', -1)
 "       command! -nargs=0 -range=% SortJavaImports <line1>,<line2>call QSort(
-"           \ 's:CmpJavaImports', 1)
-"
-"	nnoremap \ :call ExecMap('\')<CR>
-"	nnoremap _ :call ExecMap('_')<CR>
+"           \ 'CmpJavaImports', 1)
 "
 "	nnoremap <silent> <C-Space> :call ShiftWordInSpace(1)<CR>
 "	nnoremap <silent> <C-BS> :call ShiftWordInSpace(-1)<CR>
@@ -110,6 +112,11 @@ if exists("loaded_genutils")
 endif
 let loaded_genutils = 1
 
+" Make sure line-continuations won't cause any problem. This will be restored
+"   at the end
+let s:save_cpo = &cpo
+set cpo&vim
+
 " Execute this following variable in your function to make a string containing
 "   all your arguments. The string can be used to pass the variable number of
 "   arguments received by your script further down into other functions.
@@ -118,7 +125,7 @@ let loaded_genutils = 1
 " Ex:
 "   fu! s:IF(...)
 "     exec g:makeArgumentString
-"     exec "call Impl(" . argumentString . ")"
+"     exec "call Impl(1, " . argumentString . ")"
 "   endfu
 let makeArgumentString = "
     \  let __argCounter = 1\n
@@ -166,12 +173,16 @@ let makeArgumentList = "
 "   and then pass them to a function later.
 " You should make sure that the separator itself doesn't exist in the
 "   arguments. You can use the return value same as the way argumentString
-"   created by the "exec g:makeArgumentString" above is used.
+"   created by the "exec g:makeArgumentString" above is used. If the separator
+"   is a pattern, you should pass in an optional additional argument, which
+"   is an arbitrary string that is guaranteed to match the pattern, as a
+"   sample separator (see multvals.vim for details).
 " Usage:
 "     let args = 'a b c' 
 "     exec "call F(" . CreateArgString(args, ' ') . ")"
-function! CreateArgString(argList, sep)
-  call MvIterCreate(a:argList, a:sep, 'CreateArgString')
+function! CreateArgString(argList, sep, ...)
+  let sep = (a:0 == 0) ? a:sep : a:1
+  call MvIterCreate(a:argList, a:sep, 'CreateArgString', sep)
   let argString = "'"
   while MvIterHasNext('CreateArgString')
     let nextArg = MvIterNext('CreateArgString')
@@ -242,16 +253,28 @@ endfunction
 " Returns the buffer number of the given fileName if it is already loaded.
 " Works around the bug in bufnr().
 function! FindBufferForName(fileName)
+  let fileName = a:fileName
+  let fileName = substitute(fileName, '\\\@<!\%(\\\\\)*\([[,{]\)', '\\\1', 'g')
+  let _isf = &isfname
+  set isfname-=\
+  set isfname-=[
   let i = bufnr('^' . a:fileName . '$')
+  let &isfname = _isf
   if i != -1
     return i
   endif
 
-  " If bufnr didn't work, the it probably is a hidden buffer, so check the
+  " If bufnr didn't work, then it probably is a hidden buffer, so check the
   "   hidden buffers.
   let i = 1
+  "let fileName = a:fileName
+  if ! &shellslash
+    " Unprotected /'s.
+    let fileName = substitute(fileName, '\\\@<!\%(\\\\\)*/', '[\\\\/]', 'g')
+  " else it is impossible to escape \'s which are only path separators.
+  endif
   while i <= bufnr("$")
-    if bufexists(i) && ! buflisted(i) && (match(bufname(i), a:fileName) != -1)
+    if bufexists(i) && ! buflisted(i) && (match(bufname(i), fileName) != -1)
       break
     endif
     let i = i + 1
@@ -276,7 +299,14 @@ endfunction
 "   without changing the column position.
 function! MoveCurLineToWinLine(n)
   normal zt
-  execute "normal " . a:n . "\<C-Y>"
+  let _wrap = &l:wrap
+  setl nowrap
+  let n = a:n
+  if n >= winheight(0)
+    let n = winheight(0) - 1
+  endif
+  execute "normal " . n . "\<C-Y>"
+  let &l:wrap = _wrap
 endfunction
 
 
@@ -318,6 +348,15 @@ function! ArrayVarExists(varName, index)
     return 0
   endif
   return 1
+endfunction
+
+
+" Works like the reverse of the builtin escape() function. Un-escapes only the
+"   specified characters. The chars value directly goes into the []
+"   collection, so it can be anything that is accpted in [].
+function! s:UnEscape(val, chars)
+  return substitute(a:val, '\\\@<!\(\\\\\)*\\\([' . a:chars . ']\)',
+	\ '\2\1', 'g')
 endfunction
 
 
@@ -518,13 +557,14 @@ endfunction
 
 " Copy this method into your script and rename it to find the script id of the
 "   current script.
-function! s:SampleScriptIdFunction()
+function! s:MyScriptId()
   map <SID>xx <SID>xx
   let s:sid = maparg("<SID>xx")
   unmap <SID>xx
   return substitute(s:sid, "xx$", "", "")
 endfunction
-let s:myScriptId = s:SampleScriptIdFunction()
+let s:myScriptId = s:MyScriptId()
+delfunc s:MyScriptId " Not required any more.
 
 
 ""
@@ -532,7 +572,7 @@ let s:myScriptId = s:SampleScriptIdFunction()
 ""
 
 " characters that must be escaped for a regular expression
-let s:escregexp = '/*^$.~\'
+let s:escregexp = '[/*^$.~\'
 
 
 " This method tries to save the position along with the line context if
@@ -589,6 +629,8 @@ endfunction
 
 
 function! RestoreHardPosition(scriptid)
+  " This doesn't take virtual column.
+  "call cursor(s:lin_{a:scriptid}, s:col_{a:scriptid})
   execute s:lin_{a:scriptid}
   execute "normal!" s:col_{a:scriptid} . "|"
   call MoveCurLineToWinLine(s:winline_{a:scriptid})
@@ -954,65 +996,6 @@ function! CenterWordInSpace()
 endfunction
 
 
-" Reads a normal mode mapping at the command line and executes it with the
-"   given prefix. Press <BS> to correct and <Esc> to cancel.
-function! ExecMap(prefix)
-  " Temporarily remove the mapping, otherwise it will interfere with the
-  " mapcheck call below:
-  let myMap = maparg(a:prefix, 'n')
-  exec "nunmap" a:prefix
-
-  " Generate a line with spaces to clear the previous message.
-  let i = 1
-  let clearLine = "\r"
-  while i < &columns
-    let clearLine = clearLine . ' '
-    let i = i + 1
-  endwhile
-
-  let mapCmd = a:prefix
-  let foundMap = 0
-  let breakLoop = 0
-  let curMatch = ''
-  echon "\rEnter Map: " . mapCmd
-  while !breakLoop
-    let char = getchar()
-    if char !~ '^\d\+$'
-      if char == "\<BS>"
-	let mapCmd = strpart(mapCmd, 0, strlen(mapCmd) - 1)
-      endif
-    else " It is the ascii code.
-      let char = nr2char(char)
-      if char == "\<Esc>"
-	let breakLoop = 1
-      "elseif char == "\<CR>"
-	"let mapCmd = curMatch
-	"let foundMap = 1
-	"let breakLoop = 1
-      else
-	let mapCmd = mapCmd . char
-	if maparg(mapCmd, 'n') != ""
-	  let foundMap = 1
-	  let breakLoop = 1
-	else
-	  let curMatch = mapcheck(mapCmd, 'n')
-	  if curMatch == ""
-	    let mapCmd = strpart(mapCmd, 0, strlen(mapCmd) - 1)
-	  endif
-	endif
-      endif
-    endif
-    echon clearLine
-    "echon "\rEnter Map: " . substitute(mapCmd, '.', ' ', 'g') . "\t" . curMatch
-    echon "\rEnter Map: " . mapCmd
-  endwhile
-  if foundMap
-    exec "normal" mapCmd
-  endif
-  exec "nnoremap" a:prefix myMap
-endfunction
-
-
 " If lhs is already mapped, this function makes sure rhs is appended to it
 "   instead of overwriting it.
 " mapMode is used to prefix to "oremap" and used as the map command. E.g., if
@@ -1044,23 +1027,35 @@ endfunction
 "
 
 function! s:CmpByLineLengthNname(line1, line2, direction)
-  let cmp = s:CmpByLength(a:line1, a:line2, a:direction)
+  return CmpByLineLengthNname(a:line1, a:line2, a:direction)
+endfunction
+
+function! CmpByLineLengthNname(line1, line2, direction)
+  let cmp = CmpByLength(a:line1, a:line2, a:direction)
   if cmp == 0
-    let cmp = s:CmpByString(a:line1, a:line2, a:direction)
+    let cmp = CmpByString(a:line1, a:line2, a:direction)
   endif
   return cmp
 endfunction
 
-
 function! s:CmpByLength(line1, line2, direction)
+  return CmpByLength(a:line1, a:line2, a:direction)
+endfunction
+
+
+function! CmpByLength(line1, line2, direction)
   let len1 = strlen(a:line1)
   let len2 = strlen(a:line2)
   return a:direction * (len1 - len2)
 endfunction
 
+function! s:CmpJavaImports(line1, line2, direction)
+  return CmpJavaImports(a:line1, a:line2, a:direction)
+endfunction
+
 " Compare first by name and then by length.
 " Useful for sorting Java imports.
-function! s:CmpJavaImports(line1, line2, direction)
+function! CmpJavaImports(line1, line2, direction)
   " FIXME: Simplify this.
   if stridx(a:line1, '.') == -1
     let pkg1 = ''
@@ -1077,14 +1072,18 @@ function! s:CmpJavaImports(line1, line2, direction)
     let cls2 = substitute(a:line2, '^.*\.\([^. ;]\+\).*$', '\1', '')
   endif
 
-  let cmp = s:CmpByString(pkg1, pkg2, a:direction)
+  let cmp = CmpByString(pkg1, pkg2, a:direction)
   if cmp == 0
-    let cmp = s:CmpByLength(cls1, cls2, a:direction)
+    let cmp = CmpByLength(cls1, cls2, a:direction)
   endif
   return cmp
 endfunction
 
 function! s:CmpByString(line1, line2, direction)
+  return CmpByString(a:line1, a:line2, a:direction)
+endfunction
+
+function! CmpByString(line1, line2, direction)
   if a:line1 < a:line2
     return -a:direction
   elseif a:line1 > a:line2
@@ -1094,7 +1093,23 @@ function! s:CmpByString(line1, line2, direction)
   endif
 endfunction
 
+function! CmpByStringIgnoreCase(line1, line2, direction)
+  let line1 = substitute(a:line1, '.', '\u&', 'g')
+  let line2 = substitute(a:line2, '.', '\u&', 'g')
+  if line1 < line2
+    return -a:direction
+  elseif line1 > line2
+    return a:direction
+  else
+    return 0
+  endif
+endfunction
+
 function! s:CmpByNumber(line1, line2, direction)
+  return CmpByNumber(a:line1, a:line2, a:direction)
+endfunction
+
+function! CmpByNumber(line1, line2, direction)
   let num1 = a:line1 + 0
   let num2 = a:line2 + 0
 
@@ -1381,5 +1396,120 @@ endfunction
 
 endif
 " END: Persistent settings }}}
+
+
+" FileChangedShell handling {{{
+let s:fcShellPreFuncs = ''
+let s:fcShellFuncs = ''
+
+" The function can return -1 to mean use default autoread and 0 to mean
+" noautoread and 1 to mean autoread. The return value of all functions is ORed
+" for the effective autoread.
+function! AddToFCShellPre(funcName)
+  let s:fcShellPreFuncs = MvAddElement(s:fcShellPreFuncs, ',', a:funcName)
+endfunction
+
+function! RemoveFromFCShellPre(funcName)
+  let s:fcShellPreFuncs = MvRemoveElement(s:fcShellPreFuncs, ',', a:funcName)
+endfunction
+
+function! AddToFCShell(funcName)
+  let s:fcShellFuncs = MvAddElement(s:fcShellFuncs, ',', a:funcName)
+endfunction
+
+function! RemoveFromFCShell(funcName)
+  let s:fcShellFuncs = MvRemoveElement(s:fcShellFuncs, ',', a:funcName)
+endfunction
+
+let s:defFCShellInstalled = 0
+function! DefFCShellInstall()
+  if ! s:defFCShellInstalled
+    aug DefFCShell
+    au!
+    au FileChangedShell * nested call DefFileChangedShell()
+    aug END
+  endif
+  let s:defFCShellInstalled = s:defFCShellInstalled + 1
+endfunction
+
+function! DefFCShellUninstall()
+  let s:defFCShellInstalled = s:defFCShellInstalled - 1
+  if ! s:defFCShellInstalled
+    aug DefFCShell
+    au!
+    aug END
+  endif
+endfunction
+
+" This function emulates the Vim's default behavior when a |timestamp| change
+"   is detected. Use the above hooks to have your customized operations done
+"   during this event. From your callback methods, return 1 to mean autoread,
+"   0 to mean noautoread and -1 to mean system default. The return value of
+"   this method is 1 if the file was reloaded and 0 otherwise.
+function! DefFileChangedShell()
+  let autoread = s:InvokeFuncs(s:fcShellPreFuncs)
+  let bufNo = expand("<abuf>") + 0
+  if getbufvar(bufNo, '&modified')
+    let option = confirm("W12: Warning: File \"" . expand("<afile>") .
+          \ "\" has changed and the buffer was changed in Vim as well",
+          \ "&OK\n&Load File", 1, "Question")
+  elseif ! autoread
+    let option = confirm("W11: Warning: File \"" . expand("<afile>") .
+          \ "\" has changed since editing started", "&OK\n&Load File", 1,
+          \ "Question")
+  else " if autoread
+    let option = 2
+  endif
+  if option == 2
+    let alternativeFile = 0
+    let orgWin = winnr()
+    if bufNo != winbufnr(0)
+      let win = bufwinnr(bufNo)
+      if win != -1
+	exec win "wincmd w"
+      else
+	let alternativeFile = 1
+      endif
+    endif
+    " Fow now, we need to manually fire these events. I reported the problem
+    "	and Bram agreed to fix this.
+    if ! alternativeFile
+      silent! doautocmd BufReadPre
+    else
+      exec "edit! #" . expand('<abuf>')
+    endif
+    call SaveHardPosition('DefFileChangedShell')
+    edit!
+    call RestoreHardPosition('DefFileChangedShell')
+    if ! alternativeFile
+      silent! doautocmd BufRead
+    endif
+    if orgWin != winnr()
+      wincmd p
+    endif
+    return 1
+  endif
+  call s:InvokeFuncs(s:fcShellFuncs)
+  return 0
+endfunction
+
+function! s:InvokeFuncs(funcList)
+  let autoread = &autoread
+  if a:funcList != ''
+    call MvIterCreate(a:funcList, ',', 'InvokeFuncs')
+    while MvIterHasNext('InvokeFuncs')
+      exec "let result = " . MvIterNext('InvokeFuncs') . '()'
+      if result != -1
+	let autoread = autoread || result
+      endif
+    endwhile
+  endif
+  return autoread
+endfunction
+" FileChangedShell handling }}}
+
+" Restore cpo.
+let &cpo = s:save_cpo
+unlet s:save_cpo
 
 " vim6:fdm=marker
