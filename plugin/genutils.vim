@@ -2,11 +2,15 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 27-Mar-2002 @ 19:07
+" Last Modified: 10-Apr-2002 @ 10:48
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.20
+" Version: 1.0.24
+" Download From:
+"     http://vim.sourceforge.net/scripts/script.php?script_id=197
 " Description:
-"   - A scriptlet to pass variable number of arguments to other functions.
+"   - Scriptlets, g:makeArgumentString and g:makeArgumentList, and a function
+"     CreateArgString() to work with and pass variable number of arguments to
+"     other functions.
 "   - Misc. window/buffer related functions, NumberOfWindows(),
 "     FindWindowForBuffer(), FindBufferForName(), MoveCursorToWindow(),
 "     MoveCurLineToWinLine(), SetupScratchBuffer(), MapAppendCascaded()
@@ -27,11 +31,16 @@
 "     There is also a test function called RunNotifyWindowCloseTest() that
 "     demos the usage.
 "   - ShowLinesWithSyntax() function to echo lines with syntax coloring.
-"   - ShiftWordInSpace() a small utility function to move words in the
-"     space without changing the width of the field.
+"   - ShiftWordInSpace(), AlignWordWithWordInPreviousLine() utility functions to
+"     move words in the space without changing the width of the field.
 "   - A quick-sort function that can sort a buffer contents by range. Adds
 "     utility commands SortByLength and RSortByLength to sort contents by line
 "     length.
+"   - A useful ExecMap() function to facilitate recovering from typing errors
+"     in normal mode mappings (see below for examples). Normally when you make
+"     mistakes in typing normal mode commands, vim beeps at you and aborts the
+"     command. But this method allows you to continue typing the command and
+"     even backspace on errors.
 "   - A sample function to extract the scriptId of a script.
 "
 "   - Place the following  in your vimrc if you find them useful:
@@ -43,7 +52,13 @@
 "       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
 "           \ 's:CmpByLineLength', -1)
 "
-"	nnoremap <silent> \ :call ExecMap('\')<CR>
+"	nnoremap \ :call ExecMap('\')<CR>
+"	nnoremap _ :call ExecMap('_')<CR>
+"
+"	nnoremap <silent> <C-Space> :call ShiftWordInSpace(1)<CR>
+"	nnoremap <silent> <C-BS> :call ShiftWordInSpace(-1)<CR>
+"
+"	nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
 "
 
 if exists("loaded_genutils")
@@ -54,36 +69,71 @@ let loaded_genutils = 1
 " Execute this following variable in your function to make a string containing
 "   all your arguments. The string can be used to pass the variable number of
 "   arguments received by your script further down into other functions.
+" Uses __argCounter and __nextArg variables, so make sure you don't have
+"   variables with the same name. 
 " Ex:
 "   fu! s:IF(...)
 "     exec g:makeArgumentString
 "     exec "call Impl(" . argumentString . ")"
 "   endfu
 let makeArgumentString = "
-    \   if (exists('argCounter'))\n
-    \    let __argCounter = argCounter\n
-    \  endif \n
-    \  if (exists('nextArgument'))\n
-    \    let __nextArg = nextArgument\n
-    \  endif\n
-    \  let argCounter = 1\n
+    \  let __argCounter = 1\n
     \  let argumentString = ''\n
-    \  while argCounter <= a:0\n
-    \    let nextArgument = substitute(a:{argCounter},
+    \  while __argCounter <= a:0\n
+    \    let __nextArg = substitute(a:{__argCounter},
              \ \"'\", \"' . \\\"'\\\" . '\", \"g\")\n
-    \    let argumentString = argumentString . \"'\" . nextArgument . \"'\" .
-             \ ((argCounter == a:0) ? '' : ', ')\n
-    \    let argCounter = argCounter + 1\n
-    \  endwhile \n
-    \  if (exists('__argCounter'))\n
-    \    let argCounter = __argCounter\n
-    \    unlet __argCounter\n
-    \  endif \n
-    \  if (exists('__nextArg'))\n
-    \    let nextArgument = __nextArg\n
-    \    unlet __nextArg\n
-    \  endif\n
+    \    let argumentString = argumentString . \"'\" . __nextArg . \"'\" .
+             \ ((__argCounter == a:0) ? '' : ', ')\n
+    \    let __argCounter = __argCounter + 1\n
+    \  endwhile\n
+    \  unlet __argCounter\n
+    \  silent! exec 'unlet __nextArg'\n
     \ "
+
+
+" Creates a argumentList string containing all the arguments separated by
+"   commas.  You can then pass this string to CreateArgString() function below
+"   to make argumentString which can be used as mentioned above in
+"   "exec g:makeArgumentString". You can also use the scripts that let you
+"   handle arrays to manipulate this string (such as remove/insert args)
+"   before passing it on.
+" Uses __argCounter and __argSeparator variables, so make sure you don't have
+"   variables with the same name. You set the __argSeparator before executing
+"   this scriptlet to make it use a different separator.
+let makeArgumentList = "
+    \  let __argCounter = 1\n
+    \  if (! exists('__argSeparator'))\n
+    \    let __argSeparator = ','\n
+    \  endif\n
+    \  let argumentList = ''\n
+    \  while __argCounter <= a:0\n
+    \    let argumentList = argumentList . a:{__argCounter}\n
+    \    if __argCounter != a:0\n
+    \      let argumentList = argumentList . __argSeparator\n
+    \    endif\n
+    \    let __argCounter = __argCounter + 1\n
+    \  endwhile\n
+    \  unlet __argCounter\n
+    \  unlet __argSeparator\n
+    \ "
+
+
+" You should make sure that the separator doesn't exist in the argList. You
+" can use the return value the same as the argumentString created by the
+" "exec g:makeArgumentString" above.
+" Usage:
+"     let args = 'a b c' 
+"     exec "call F(" . ConvertToArgString(args, ' ') . ")"
+function! CreateArgString(argList, sep)
+  let argString = a:argList
+  if a:sep != "'"
+    let argString = substitute(argString, "'", "' . \"'\" . '", 'g')
+  endif
+  let argString = substitute(argString, a:sep . '\?\([^' . a:sep . ']*\)',
+	\ "'\\1', ", 'g')
+  return argString
+endfunction
+
 
 "
 " Return the number of windows open currently.
@@ -111,7 +161,7 @@ function! FindWindowForBuffer(bufferName, checkUnlisted)
 
     " The window name could be having extra backslashes to protect certain
     " chars, so first expand them.
-    exec "let bufName = \"" . a:bufferName . "\"" 
+    let bufName = DeEscape(a:bufferName)
     let i = 1
     while winbufnr(i) != -1
       if bufname(winbufnr(i)) == bufName
@@ -201,6 +251,13 @@ function! ArrayVarExists(varName, index)
     return 0
   endif
   return 1
+endfunction
+
+
+" Works like the reverse of the builtin escape() function.
+function! DeEscape(val)
+  exec "let val = \"" . a:val . "\"" 
+  return val
 endfunction
 
 
@@ -471,7 +528,7 @@ endfunction
 function! AddNotifyWindowClose(windowTitle, functionName)
   " The window name could be having extra backslashes to protect certain
   " chars, so first expand them.
-  exec "let bufName = \"" . a:windowTitle . "\"" 
+  let bufName = DeEscape(a:windowTitle)
 
   " Make sure there is only one entry per window title.
   if exists("s:notifyWindowTitles") && s:notifyWindowTitles != ""
@@ -502,7 +559,7 @@ endfunction
 function! RemoveNotifyWindowClose(windowTitle)
   " The window name could be having extra backslashes to protect certain
   " chars, so first expand them.
-  exec "let bufName = \"" . a:windowTitle . "\"" 
+  let bufName = DeEscape(a:windowTitle)
 
   if !exists("s:notifyWindowTitles")
     return
@@ -659,16 +716,64 @@ function! ShowLinesWithSyntax() range
 endfunction
 
 
+function! AlignWordWithWordInPreviousLine()
+  "First go to the first col in the word.
+  if getline('.')[col('.') - 1] =~ '\s'
+    normal! w
+  else
+    normal! "_yiw
+  endif
+  let orgVcol = virtcol('.')
+  let prevLnum = prevnonblank(line('.') - 1)
+  if prevLnum == -1
+    return
+  endif
+  let prevLine = getline(prevLnum)
+
+  " First get the column to align with.
+  if prevLine[orgVcol - 1] =~ '\s'
+    " column starts from 1 where as index starts from 0.
+    let nonSpaceStrInd = orgVcol " column starts from 1 where as index starts from 0.
+    while prevLine[nonSpaceStrInd] =~ '\s'
+      let nonSpaceStrInd = nonSpaceStrInd + 1
+    endwhile
+  else
+    if strlen(prevLine) < orgVcol
+      let nonSpaceStrInd = strlen(prevLine) - 1
+    else
+      let nonSpaceStrInd = orgVcol - 1
+    endif
+
+    while prevLine[nonSpaceStrInd - 1] !~ '\s' && nonSpaceStrInd > 0
+      let nonSpaceStrInd = nonSpaceStrInd - 1
+    endwhile
+  endif
+  let newVcol = nonSpaceStrInd + 1 " Convert to column number.
+
+  if orgVcol > newVcol " We need to reduce the spacing.
+    let sub = strpart(getline('.'), newVcol - 1, (orgVcol - newVcol))
+    if sub =~ '^\s\+$'
+      " Remove the excess space.
+      exec 'normal! ' . newVcol . '|'
+      exec 'normal! ' . (orgVcol - newVcol) . 'x'
+    endif
+  elseif orgVcol < newVcol " We need to insert spacing.
+    exec 'normal! ' . orgVcol . '|'
+    exec 'normal! ' . (newVcol - orgVcol) . 'i '
+  endif
+endfunction
+
+
 " This function shifts the word in the space without moving the following words.
 "   Doesn't work for tabs.
 function! ShiftWordInSpace(dir)
-  let moveToWordStart = '"_yiw'
+  let moveToWordStart = '"_yiW'
   if a:dir == 1 " forward.
     " If currently on <Space>...
     if getline(".")[col(".") - 1] == " "
-      let moveCommand = 'e'
+      let moveCommand = 'E'
     else
-      let moveCommand = moveToWordStart . 'e'
+      let moveCommand = moveToWordStart . 'E'
     endif
     let removeCommand = "lx"
     let pasteCommand = moveToWordStart . "i "
@@ -681,7 +786,7 @@ function! ShiftWordInSpace(dir)
       let moveCommand = moveToWordStart
     endif
     let removeCommand = "hx"
-    let pasteCommand = moveToWordStart . "ea "
+    let pasteCommand = moveToWordStart . "Ea "
     let offset = -3
   endif
 
@@ -710,12 +815,61 @@ endfunction
 
 
 " Reads a normal mode mapping at the command line and executes it with the
-"   given prefix.
+"   given prefix. Press <BS> to correct and <Esc> to cancel.
 function! ExecMap(prefix)
-  let map = input("Enter Map: ")
-  if map != ""
-    exec "normal " . a:prefix . map
+  " Temporarily remove the mapping, otherwise it will interfere with the
+  " mapcheck call below:
+  let myMap = maparg(a:prefix, 'n')
+  exec "nunmap" a:prefix
+
+  " Generate a line with spaces to clear the previous message.
+  let i = 1
+  let clearLine = "\r"
+  while i < &columns
+    let clearLine = clearLine . ' '
+    let i = i + 1
+  endwhile
+
+  let mapCmd = a:prefix
+  let foundMap = 0
+  let breakLoop = 0
+  let curMatch = ''
+  echon "\rEnter Map: " . mapCmd
+  while !breakLoop
+    let char = getchar()
+    if char !~ '^\d\+$'
+      if char == "\<BS>"
+	let mapCmd = strpart(mapCmd, 0, strlen(mapCmd) - 1)
+      endif
+    else " It is the ascii code.
+      let char = nr2char(char)
+      if char == "\<Esc>"
+	let breakLoop = 1
+      "elseif char == "\<CR>"
+	"let mapCmd = curMatch
+	"let foundMap = 1
+	"let breakLoop = 1
+      else
+	let mapCmd = mapCmd . char
+	if maparg(mapCmd, 'n') != ""
+	  let foundMap = 1
+	  let breakLoop = 1
+	else
+	  let curMatch = mapcheck(mapCmd, 'n')
+	  if curMatch == ""
+	    let mapCmd = strpart(mapCmd, 0, strlen(mapCmd) - 1)
+	  endif
+	endif
+      endif
+    endif
+    echon clearLine
+    "echon "\rEnter Map: " . substitute(mapCmd, '.', ' ', 'g') . "\t" . curMatch
+    echon "\rEnter Map: " . mapCmd
+  endwhile
+  if foundMap
+    exec "normal" mapCmd
   endif
+  exec "nnoremap" a:prefix myMap
 endfunction
 
 
@@ -842,7 +996,7 @@ endfunction
 "   abbreviation. This solves the problem with abbreviations, where we are
 "   left with an extra space after the expansion.
 " Ex:
-"   inoreabbr \date\ <C-R>=strftime("%d-%b-%Y")<CR><C-R>=EatChar('\s')<CR>
+"   inoreabbr \stdout\ System.out.println("");<Left><Left><Left><C-R>=EatChar('\s')<CR>
 function! EatChar(pat)
    let c = nr2char(getchar())
    return (c =~ a:pat) ? '' : c
