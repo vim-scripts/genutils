@@ -2,18 +2,26 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 31-Mar-2003 @ 10:55AM
-" Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.6.0
+" Last Change: 25-Aug-2003 @ 14:52
+" Requires: Vim-6.0, multvals.vim(3.2)
+" Version: 1.7.7
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
 " Download From:
 "     http://www.vim.org/script.php?script_id=197
 " Description:
-"   - Scriptlets, g:makeArgumentString and g:makeArgumentList, and a function
-"     CreateArgString() to work with and pass variable number of arguments to
-"     other functions.
+"   - Functions MakeArgumentString(), MakeArgumentList() and CreateArgString()
+"     to work with and pass variable number of arguments to other functions.
+"	  fu! s:IF(...)
+"	    exec MakeArgumentString('myArgString')
+"   	    exec "call Impl(1, " . myArgString . ")"
+"   	  endfu
+"	or	
+"	  fu! s:IF(...)
+"	    exec MakeArgumentList('myArgList', ';')
+"   	    exec "call Impl(1, " . CreateArgString(myArgList, ';') . ")"
+"   	  endfu
 "   - Misc. window/buffer related functions, NumberOfWindows(),
 "     FindWindowForBuffer(), FindBufferForName(), MoveCursorToWindow(),
 "     MoveCurLineToWinLine(), SetupScratchBuffer(), MapAppendCascaded()
@@ -48,8 +56,17 @@
 "     RelPathFromFile() and RelPathFromDir() to find relative paths (useful
 "     HTML href's). A side effect is the CommonString() function to find the
 "     common string of two strings.
-"   - UnEscape() and DeEscape() functions to reverse what built-in escape()
-"     does.
+"   - UnEscape() and DeEscape() functions to reverse and Escape() to compliment
+"     what built-in escape() does.
+"   - Utility functions CurLineHasSign() and ClearAllSigns() to fill in the
+"     gaps left by Vim.
+"   - GetVimCmdOutput() function to capture the output of Vim built-in
+"     commands, in a safe manner. This function is available only for Vim
+"     version 6.2 or higher.
+"   - OptClearBuffer() function to clear the contents and undo history of the
+"     current buffer in an optimal manner. Ideal to be used when plugins need
+"     to refresh their windows and don't care about preserving the current
+"     contents (which is the most usual case).
 "   - Functions to have persistent data, PutPersistentVar() and
 "     GetPersistentVar(). You don't need to worry about saving in files and
 "     reading them back. To disable, set g:genutilsNoPersist in your vimrc.
@@ -85,7 +102,8 @@
 "     Pre and a Post event). Suggested usage is to use AddToFCShellPre() or
 "     AddToFCShell() and either install a default event handling mechanism for
 "     all files by calling DefFCShellInstall() or create your own autocommand on
-"     a matching pattern to call DefFileChangedShell() function.
+"     a matching pattern to call DefFileChangedShell() function. See
+"     perforce.vim for usage examples.
 "   - Place the following in your vimrc if you find them useful:
 "
 "       command! DiffOff :call CleanDiffOptions()
@@ -102,11 +120,19 @@
 "	nnoremap <silent> \cw :call CenterWordInSpace()<CR>
 "
 "	nnoremap <silent> \va :call AlignWordWithWordInPreviousLine()<CR>
+" Deprecations:
+"   - The g:makeArgumentString and g:makeArgumentList are obsolete and are
+"     deprecated, please use MakeArgumentString() and MakeArgumentList()
+"     instead.
+"   - FindWindowForBuffer() function is now deprecated, as the corresponding
+"     Vim bugs are fixed. Use the below expr instead:
+"	bufwinnr(FindBufferForName(fileName))
 " TODO:
-"   - fnamemodify() on Unix doesn't expand to full name if a name containing
-"     path components is passed in.
+"   - fnamemodify() on Unix doesn't expand to full name if the filename doesn't
+"     really exist on the filesystem.
 "   - Support specifying arguments (with spaces) enclosed in "" or '' for
-"     makeArgumentString.
+"     makeArgumentString. Just combine the arguments that are between "" or ''
+"     and strip the quotes off.
 "
 
 if exists("loaded_genutils")
@@ -119,56 +145,72 @@ let loaded_genutils = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
-" Execute this following variable in your function to make a string containing
-"   all your arguments. The string can be used to pass the variable number of
-"   arguments received by your script further down into other functions.
-" Uses __argCounter and __nextArg variables, so make sure you don't have
-"   variables with the same name. 
+
+let g:makeArgumentString = 'exec MakeArgumentString()'
+let g:makeArgumentList = 'exec MakeArgumentList()'
+
+" Execute the function return value to make a string containing all your
+"   variable number of arguments that are passed to your function, which can
+"   be used to pass the variable number of arguments further down to another
+"   function. This by default generates a local variable named
+"   'argumentString', which can be changed by passing a different name as the
+"   first argument to this function.
+" Uses __argCounter and __nextArg local variables, so make sure you don't have
+"   variables with the same name in your function.
 " Ex:
 "   fu! s:IF(...)
-"     exec g:makeArgumentString
+"     exec MakeArgumentString()
 "     exec "call Impl(1, " . argumentString . ")"
 "   endfu
-let makeArgumentString = "
-    \  let __argCounter = 1\n
-    \  let argumentString = ''\n
-    \  while __argCounter <= a:0\n
-    \    let __nextArg = substitute(a:{__argCounter},
-             \ \"'\", \"' . \\\"'\\\" . '\", \"g\")\n
-    \    let argumentString = argumentString . \"'\" . __nextArg . \"'\" .
-             \ ((__argCounter == a:0) ? '' : ', ')\n
-    \    let __argCounter = __argCounter + 1\n
-    \  endwhile\n
-    \  unlet __argCounter\n
-    \  silent! exec 'unlet __nextArg'\n
-    \ "
+let s:makeArgumentString = ''
+function! MakeArgumentString(...)
+  if s:makeArgumentString == ''
+    let s:makeArgumentString = s:StripFunctionHeadAndTail(s:myScriptId.
+	  \ '_makeArgumentString')
+  endif
+  if a:0 > 0 && a:1 != ''
+    return substitute(s:makeArgumentString, '\<argumentString\>', a:1, 'g')
+  else
+    return s:makeArgumentString
+  endif
+endfunction
 
 
-" Creates a argumentList string containing all the arguments separated by
-"   commas.  You can then pass this string to CreateArgString() function below
-"   to make argumentString which can be used as mentioned above in
-"   "exec g:makeArgumentString". You can also use the scripts that let you
-"   handle arrays to manipulate this string (such as remove/insert args)
-"   before passing it on.
-" Uses __argCounter and __argSeparator variables, so make sure you don't have
-"   variables with the same name. You set the __argSeparator before executing
-"   this scriptlet to make it use a different separator.
-let makeArgumentList = "
-    \  let __argCounter = 1\n
-    \  if (! exists('__argSeparator'))\n
-    \    let __argSeparator = ','\n
-    \  endif\n
-    \  let argumentList = ''\n
-    \  while __argCounter <= a:0\n
-    \    let argumentList = argumentList . a:{__argCounter}\n
-    \    if __argCounter != a:0\n
-    \      let argumentList = argumentList . __argSeparator\n
-    \    endif\n
-    \    let __argCounter = __argCounter + 1\n
-    \  endwhile\n
-    \  unlet __argCounter\n
-    \  unlet __argSeparator\n
-    \ "
+" Execute the function return value to make a comma separated list of all the
+"   variable number of arugments that were passed to your function. This by
+"   default generates a local variable with the name 'argumentList', which can
+"   be changed by passing a different name as the first argument to this
+"   function. You can panipulate this variable and pass the string to
+"   CreateArgString() function below to make an argument string which can be
+"   used as mentioned above in "exec MakeArgumentString()". You can also use
+"   the scripts that let you handle arrays to manipulate this string (such as
+"   remove/insert args) before passing them on.
+" Uses __argCounter and __argSeparator local variables, so make sure you don't
+"   have variables with the same name in your function. You can also pass in a
+"   second optional argument which is used as the argument separator instead
+"   of the default ','.
+" Ex: 
+"   fu! s:IF(...)
+"     exec MakeArgumentList()
+"     exec "call Impl(1, " . CreateArgString(argumentList, ',') . ")"
+"   endfu
+let s:makeArgumentList = ''
+function! MakeArgumentList(...)
+  if s:makeArgumentList == ''
+    let s:makeArgumentList = s:StripFunctionHeadAndTail(s:myScriptId.
+	  \ '_makeArgumentList')
+  endif
+  if a:0 > 0 && a:1 != ''
+    let mkArgLst = substitute(s:makeArgumentList, '\<argumentList\>', a:1, 'g')
+    if a:0 > 1 && a:2 != ''
+      let mkArgLst = substitute(s:makeArgumentList,
+	    \ '\(\s\+let __argSeparator = \)[^'."\n".']*', "\\1'".a:2."'", '')
+    endif
+    return mkArgLst
+  else
+    return s:makeArgumentList
+  endif
+endfunction
 
 
 " Useful to collect arguments into a soft-array (see multvals on vim.sf.net)
@@ -199,6 +241,49 @@ function! CreateArgString(argList, sep, ...)
 endfunction
 
 
+" {{{
+function! s:_makeArgumentString()
+  let __argCounter = 1
+  let argumentString = ''
+  while __argCounter <= a:0
+    let __nextArg = substitute(a:{__argCounter}, "'", "' . \"'\" . '", "g")
+    let argumentString = argumentString . "'" . __nextArg . "'" .
+	  \ ((__argCounter == a:0) ? '' : ', ')
+    let __argCounter = __argCounter + 1
+  endwhile
+  unlet __argCounter
+  if exists('__nextArg')
+    unlet __nextArg
+  endif
+endfunction
+
+function! s:_makeArgumentList()
+  let __argCounter = 1
+  let __argSeparator = ','
+  let argumentList = ''
+  while __argCounter <= a:0
+    let argumentList = argumentList . a:{__argCounter}
+    if __argCounter != a:0
+      let argumentList = argumentList . __argSeparator
+    endif
+    let __argCounter = __argCounter + 1
+  endwhile
+  unlet __argCounter
+  unlet __argSeparator
+endfunction
+
+function! s:StripFunctionHeadAndTail(funcName)
+  let listing = GetVimCmdOutput('func '.a:funcName)
+  let listing = substitute(listing,
+	\ '\_s*function '.a:funcName.'()'."\n\\?", '', '')
+  let listing = substitute(listing, 'endfunction\s*$', '', '')
+  let listing = substitute(listing, '\(\%(^\|'."\n".'\)\s*\)\@<=\d\+',
+	\ '', 'g')
+  return listing
+endfunction
+" }}}
+
+
 " Useful function to debug passing arguments to functions. See exactly what
 "   you receive on the other side.
 " Ex: :exec 'call DebugShowArgs('. CreateArgString("a 'b' c", ' ') . ')' 
@@ -225,67 +310,41 @@ function! NumberOfWindows()
   return i - 1
 endfunction
 
-"
-" Find the window number for the buffer passed. If checkUnlisted is non-zero,
-"   then it searches for the buffer in the unlisted buffers, to work-around
-"   the vim bug that bufnr() doesn't work for unlisted buffers. It also
-"   unprotects any extra back-slashes from the bufferName, for the sake of
-"   comparision with the existing buffer names.
-"
+" Find the window number for the buffer passed.
+" The fileName argument is treated literally, unlike the bufnr() which treats
+"   the argument as a regex pattern.
 function! FindWindowForBuffer(bufferName, checkUnlisted)
-  let bufno = bufnr('^' . a:bufferName . '$')
-  " bufnr() will not find unlisted buffers.
-  if bufno == -1 && a:checkUnlisted
-    " Iterate over all the open windows for 
-
-    " The window name could be having extra backslashes to protect certain
-    " chars, so first expand them.
-    let bufName = DeEscape(a:bufferName)
-    let i = 1
-    while winbufnr(i) != -1
-      if bufname(winbufnr(i)) == bufName
-        return i;
-      endif
-      let i = i + 1
-    endwhile
-  endif
-  return bufwinnr(bufno)
+  return bufwinnr(FindBufferForName(a:bufferName))
 endfunction
 
 " Returns the buffer number of the given fileName if it is already loaded.
-" Works around the bug in bufnr().
+" The fileName argument is treated literally, unlike the bufnr() which treats
+"   the argument as a filename-pattern, however it first removes one level of
+"   back-slashes from the bufferName.
 function! FindBufferForName(fileName)
   let fileName = a:fileName
-  let fileName = substitute(fileName, '\\\@<!\%(\\\\\)*\([[,{]\)', '\\\1', 'g')
+  " The name could be having extra backslashes to protect certain chars (such
+  "   as '#' and '%'), so first expand them.
+  let fileName = DeEscape(fileName)
+  " Protect the regex characters that are not already protected.
+  let fileName = substitute(fileName, '\\\@<!\%(\\\\\)*\([[,{\\]\)', '\\\1',
+	\ 'g')
   let _isf = &isfname
-  set isfname-=\
-  set isfname-=[
-  let i = bufnr('^' . a:fileName . '$')
-  let &isfname = _isf
-  if i != -1
-    return i
-  endif
-
-  " If bufnr didn't work, then it probably is a hidden buffer, so check the
-  "   hidden buffers.
-  let i = 1
-  "let fileName = a:fileName
-  if ! &shellslash
-    " Unprotected /'s.
-    let fileName = substitute(fileName, '\\\@<!\%(\\\\\)*/', '[\\\\/]', 'g')
-  " else it is impossible to escape \'s which are only path separators.
-  endif
-  while i <= bufnr("$")
-    if bufexists(i) && ! buflisted(i) && (match(bufname(i), fileName) != -1)
-      break
-    endif
-    let i = i + 1
-  endwhile
-  if i <= bufnr("$")
-    return i
+  if v:version >= 602
+    try
+      set isfname-=\
+      set isfname-=[
+      let i = bufnr('^' . fileName . '$')
+    finally
+      let &isfname = _isf
+    endtry
   else
-    return -1
+    set isfname-=\
+    set isfname-=[
+    let i = bufnr('^' . fileName . '$')
+    let &isfname = _isf
   endif
+  return i
 endfunction
 
 
@@ -346,6 +405,16 @@ endfunction
 "     if ArrayVarExists("array", id)
 "       let val = array{id}
 "     endif
+if v:version >= 602
+function! ArrayVarExists(varName, index)
+  try
+    exec "let test = " . a:varName . "{a:index}"
+  catch /^Vim\%((\a\+)\)\=:E121/
+    return 0
+  endtry
+  return 1
+endfunction
+else
 function! ArrayVarExists(varName, index)
   let v:errmsg = ""
   silent! exec "let test = " . a:varName . "{a:index}"
@@ -355,27 +424,62 @@ function! ArrayVarExists(varName, index)
   endif
   return 1
 endfunction
+endif
+
+
+" Works like the built-in escape(), except that it escapes the passed in
+"   characters only if they are not already escaped, so something like
+"   'a\bc\\bd' would become 'a\bc\\\bd'. The chars value directly goes into
+"   the [] collection, so it can be anything that is accepted in [].
+function! Escape(str, chars)
+  return substitute(a:str, '\\\@<!\(\\\\\)*\([' . a:chars .']\)', '\1\\\2', 'g')
+endfunction
 
 
 " Works like the reverse of the builtin escape() function. Un-escapes only the
 "   specified characters. The chars value directly goes into the []
-"   collection, so it can be anything that is accpted in [].
-function! s:UnEscape(val, chars)
-  return substitute(a:val, '\\\@<!\(\\\\\)*\\\([' . a:chars . ']\)',
+"   collection, so it can be anything that is accepted in [].
+function! s:UnEscape(str, chars)
+  return substitute(a:str, '\\\@<!\(\\\\\)*\\\([' . a:chars . ']\)',
 	\ '\2\1', 'g')
 endfunction
 
 
-" Works like the reverse of the builtin escape() function. De-escapes all the
-" escaped characters.
-function! DeEscape(val)
-  let val = substitute(a:val, '"', '\\"', 'g')
-  exec "let val = \"" . val . "\"" 
-  return val
+" Works like the reverse of the built-in escape() function. De-escapes all the
+"   escaped characters. Essentially removes one level of escaping from the
+"   string, so something like: 'a\b\\\\c\\d' would become 'ab\\c\d'.
+function! DeEscape(str)
+  let str = a:str
+  let str = substitute(str, '\\\(\\\|[^\\]\)', '\1', 'g')
+  return str
+endfunction
+
+
+" Expands the string for the special characters. The return value should
+"   essentially be would you see if it was a string constant with
+"   double-quotes.
+function! s:ExpandStr(str)
+  let str = substitute(a:str, '"', '\\"', 'g')
+  exec "let str = \"" . str . "\"" 
 endfunction
 
 
 " Returns 1 if preview window is open or 0 if not.
+if v:version >= 602
+function! IsPreviewWindowOpen()
+  let _eventignore = &eventignore
+  try
+    set eventignore+=WinLeave,WinEnter
+    exec "wincmd P"
+  catch /^Vim\%((\a\+)\)\=:E441/
+    return 0
+  finally
+    let &eventignore = _eventignore
+  endtry
+  wincmd p
+  return 1
+endfunction
+else
 function! IsPreviewWindowOpen()
   let v:errmsg = ""
   silent! exec "wincmd P"
@@ -386,6 +490,7 @@ function! IsPreviewWindowOpen()
     return 1
   endif
 endfunction
+endif
 
 
 "
@@ -477,7 +582,7 @@ endfunction
 
 
 function! ResetWindowSettings2(sid)
-  if ! ArrayVarExists("s:winSettings", a:sid)
+  if ArrayVarExists("s:winSettings", a:sid)
     unlet s:winSettings{a:sid}
   endif
 endfunction
@@ -669,16 +774,23 @@ endfunction
 "
 " When the window with the title windowTitle is closed, the global function
 "   functionName is called with the title as an argument, and the entries are
-"   removed, so if you are still interested, you need to register again.
+"   removed, so if you need future notifications, then you need to register
+"   again. The windowTitle here is nothing but the buffer with the name that
+"   you are interested in.
 "
 function! AddNotifyWindowClose(windowTitle, functionName)
   " The window name could be having extra backslashes to protect certain
   " chars, so first expand them.
   let bufName = DeEscape(a:windowTitle)
+  call s:AddNotifyWindowClose(bufName, a:functionName)
+endfunction
+
+function! s:AddNotifyWindowClose(windowTitle, functionName)
+  let bufName = a:windowTitle
 
   " Make sure there is only one entry per window title.
   if exists("s:notifyWindowTitles") && s:notifyWindowTitles != ""
-    call RemoveNotifyWindowClose(bufName)
+    call s:RemoveNotifyWindowClose(bufName)
   endif
 
   if !exists("s:notifyWindowTitles")
@@ -706,6 +818,11 @@ function! RemoveNotifyWindowClose(windowTitle)
   " The window name could be having extra backslashes to protect certain
   " chars, so first expand them.
   let bufName = DeEscape(a:windowTitle)
+  call s:RemoveNotifyWindowClose(bufName)
+endfunction
+
+function! s:RemoveNotifyWindowClose(windowTitle)
+  let bufName = a:windowTitle
 
   if !exists("s:notifyWindowTitles")
     return
@@ -738,17 +855,17 @@ function! CheckWindowClose()
   endif
 
   " First make an array with all the existing window titles.
-  let i = 1
-  let currentWindows = ""
-  while winbufnr(i) != -1
-    let bufname = bufname(winbufnr(i))
-    if bufname != ""
-      " For performance reasons.
-      "let currentWindows = MvAddElement(currentWindows, ";", bufname)
-      let currentWindows = currentWindows . bufname . ";"
-    endif
-    let i = i+1
-  endwhile
+  "let i = 1
+  "let currentWindows = ""
+  "while winbufnr(i) != -1
+  "  let bufname = bufname(winbufnr(i))
+  "  if bufname != ""
+  "    " For performance reasons.
+  "    "let currentWindows = MvAddElement(currentWindows, ";", bufname)
+  "    let currentWindows = currentWindows . bufname . ";"
+  "  endif
+  "  let i = i+1
+  "endwhile
   "call input("currentWindows: " . currentWindows)
 
   " Now iterate over all the registered window titles and see which one's are
@@ -760,7 +877,8 @@ function! CheckWindowClose()
   call MvIterCreate(s:notifyWindowTitles, ";", "NotifyWindowClose")
   while MvIterHasNext("NotifyWindowClose")
     let nextWin = MvIterNext("NotifyWindowClose")
-    if ! MvContainsElement(currentWindows, ";", nextWin)
+    if bufwinnr(nextWin) == -1
+    "if ! MvContainsElement(currentWindows, ";", nextWin)
       let funcName = MvElementAt(s:notifyWindowFunctions, ";", i)
       let cmd = "call " . funcName . "(\"" . nextWin . "\")"
       "call input("cmd: " . cmd)
@@ -787,9 +905,9 @@ endfunction
 "
 "function! RunNotifyWindowCloseTest()
 "  split ABC
-"  split XYZ
+"  split X Y Z
 "  call AddNotifyWindowClose("ABC", "NotifyWindowCloseF")
-"  call AddNotifyWindowClose("XYZ", "NotifyWindowCloseF")
+"  call AddNotifyWindowClose("X Y Z", "NotifyWindowCloseF")
 "  call input("notifyWindowTitles: " . s:notifyWindowTitles)
 "  call input("notifyWindowFunctions: " . s:notifyWindowFunctions)
 "  au WinEnter
@@ -809,14 +927,14 @@ endfunction
 
 "
 " TODO: For large ranges, the cmd can become too big, so make it one cmd per
-"         line.
-" Display the given line(s) from the current file in the command area (i.e.,
+"       line.
+" Displays the given line(s) from the current file in the command area (i.e.,
 " echo), using that line's syntax highlighting (i.e., WYSIWYG).
 "
 " If no line number is given, display the current line.
 "
 " Originally,
-" From: Gary Holloway <gary@castandcrew.com>
+" From: Gary Holloway "gary at castandcrew dot com"
 " Date: Wed, 16 Jan 2002 14:31:56 -0800
 "
 function! ShowLinesWithSyntax() range
@@ -831,10 +949,7 @@ function! ShowLinesWithSyntax() range
   let show_line = a:firstline
   let isMultiLine = ((a:lastline - a:firstline) > 1)
   while show_line <= a:lastline
-    if (show_line - a:firstline) > 1
-      let cmd = cmd . '\n'
-    endif
-
+    let cmd = ''
     let length = strlen(getline(show_line))
     let column = 1
 
@@ -842,25 +957,27 @@ function! ShowLinesWithSyntax() range
       let group = synIDattr(synID(show_line, column, 1), 'name')
       if group != prev_group
         if cmd != ''
-          let cmd = cmd . '"|'
+          let cmd = cmd . "'|"
         endif
-        let cmd = cmd . 'echohl ' . (group == '' ? 'NONE' : group) . '|echon "'
+        let cmd = cmd . 'echohl ' . (group == '' ? 'NONE' : group) . "|echon '"
         let prev_group = group
       endif
       let char = strpart(getline(show_line), column - 1, 1)
-      if char == '"'
-        let char = '\"'
+      if char == "'"
+        let char = "'."'".'"
       endif
       let cmd = cmd . char
       let column = column + 1
     endwhile
 
+    try
+      exec cmd."\n'"
+    catch
+      echo ''
+    endtry
     let show_line = show_line + 1
   endwhile
-  let cmd = cmd . '"|echohl NONE'
-
-  let g:firstone = cmd
-  exe cmd
+  echohl NONE
 endfunction
 
 
@@ -1003,7 +1120,10 @@ endfunction
 
 
 " If lhs is already mapped, this function makes sure rhs is appended to it
-"   instead of overwriting it.
+"   instead of overwriting it. If you are rhs has any script local functions,
+"   make sure you use the <SNR>\d\+_ prefix instead of the <SID> prefix (or the
+"   <SID> will be replaced by the SNR number of genutils script, instead of
+"   yours).
 " mapMode is used to prefix to "oremap" and used as the map command. E.g., if
 "   mapMode is 'n', then the function call results in the execution of noremap
 "   command.
@@ -1023,6 +1143,46 @@ function! MapAppendCascaded(lhs, rhs, mapMode)
   exec a:mapMode . "oremap" a:lhs self . a:rhs
 endfunction
 
+
+" Just a convenience function. This returns the output of the command as a
+" string, without corrupting any registers. Returns empty string on errors.
+" Check for v:errmsg after calling this function for any error messages.
+if v:version >= 602
+function! GetVimCmdOutput(cmd)
+  let v:errmsg = ''
+  let output = ''
+  let _z = @z
+  try
+    redir @z
+    silent exec a:cmd
+  catch /.*/
+    let v:errmsg = substitute(v:exception, '^[^:]\+:', '', '')
+  finally
+    redir END
+    if v:errmsg == ''
+      let output = @z
+    endif
+    let @z = _z
+  endtry
+  return output
+endfunction
+endif
+
+
+" Clear the contents of the current buffer in an optimum manner.
+function! OptClearBuffer()
+  " Go as far as possible in the undo history to conserve Vim resources.
+  let _modifiable = &l:modifiable
+  let _undolevels = &undolevels
+  try
+    setl modifiable
+    set undolevels=-1
+    silent! 0,$delete _
+  finally
+    let &undolevels = _undolevels
+    let &l:modifiable = _modifiable
+  endtry
+endfunction
 
 
 "" START: Sorting support. {{{
@@ -1360,6 +1520,7 @@ endfunction
 
 " END: Relative path }}}
 
+
 " BEGIN: Persistent settings {{{
 if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
 
@@ -1496,7 +1657,7 @@ function! s:InvokeFuncs(funcList)
   let autoread = &autoread
   if a:funcList != ''
     call MvIterCreate(a:funcList, ',', 'InvokeFuncs')
-    while MvIterHasNext('InvokeFuncs')
+    while MvIterHasNext('InvokeFuncs') && ! autoread
       exec "let result = " . MvIterNext('InvokeFuncs') . '()'
       if result != -1
 	let autoread = autoread || result
@@ -1506,6 +1667,31 @@ function! s:InvokeFuncs(funcList)
   return autoread
 endfunction
 " FileChangedShell handling }}}
+
+
+" Sign related utilities {{{
+" Returns 
+function! CurLineHasSign()
+  let signs = s:GetVimCmdOutput('sign place buffer=' . bufnr('%'), 1)
+  return (match(signs,
+	\ 'line=' . line('.') . '\s\+id=\d\+\s\+name=VimBreakPt') != -1)
+endfunction
+
+" Clears all signs in the current buffer.
+function! ClearAllSigns()
+  let signs = GetVimCmdOutput('sign place buffer=' . bufnr('%'), 1)
+  let curIdx = 0
+  let pat = 'line=\d\+\s\+id=\zs\d\+\ze\s\+name=VimBreakPt'
+  let id = 0
+  while curIdx != -1 && curIdx < strlen(signs)
+    let id = matchstr(signs, pat, curIdx)
+    if id != ''
+      exec 'sign unplace ' . id . ' buffer=' . bufnr('%')
+    endif
+    let curIdx = matchend(signs, pat, curIdx)
+  endwhile
+endfunction
+" }}}
 
 " Restore cpo.
 let &cpo = s:save_cpo
