@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 21-Mar-2003 @ 19:31PM
+" Last Change: 30-Mar-2003 @ 10:51AM
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.4.12
+" Version: 1.5.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -298,14 +298,14 @@ endfunction
 " Moves the current line such that it is going to be the nth line in the window
 "   without changing the column position.
 function! MoveCurLineToWinLine(n)
-  normal zt
+  normal! zt
   let _wrap = &l:wrap
   setl nowrap
   let n = a:n
   if n >= winheight(0)
     let n = winheight(0) - 1
   endif
-  execute "normal " . n . "\<C-Y>"
+  execute "normal! " . n . "\<C-Y>"
   let &l:wrap = _wrap
 endfunction
 
@@ -936,7 +936,7 @@ function! ShiftWordInSpace(dir)
   endif
 
   let savedCol = col(".")
-  exec "normal" move1
+  exec "normal!" move1
   let curCol = col(".")
   let possible = 0
   " Check if there is a space at the end.
@@ -944,18 +944,18 @@ function! ShiftWordInSpace(dir)
     let possible = 1
   elseif getline(".")[curCol + offset] == " "
     " Remove the space from here.
-    exec "normal" removeCommand
+    exec "normal!" removeCommand
     let possible = 1
   endif
 
   " Move back into the word.
-  "exec "normal" savedCol . "|"
+  "exec "normal!" savedCol . "|"
   if possible == 1
-    exec "normal" pasteCommand
-    exec "normal" move2
+    exec "normal!" pasteCommand
+    exec "normal!" move2
   else
     " Move to the original location.
-    exec "normal" savedCol . "|"
+    exec "normal!" savedCol . "|"
   endif
 endfunction
 
