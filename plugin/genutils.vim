@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 25-Aug-2003 @ 14:52
-" Requires: Vim-6.0, multvals.vim(3.2)
-" Version: 1.7.7
+" Last Change: 25-Aug-2003 @ 20:07
+" Requires: Vim-6.0, multvals.vim(3.3)
+" Version: 1.8.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -180,7 +180,7 @@ endfunction
 "   variable number of arugments that were passed to your function. This by
 "   default generates a local variable with the name 'argumentList', which can
 "   be changed by passing a different name as the first argument to this
-"   function. You can panipulate this variable and pass the string to
+"   function. You can manipulate this variable and pass the string to
 "   CreateArgString() function below to make an argument string which can be
 "   used as mentioned above in "exec MakeArgumentString()". You can also use
 "   the scripts that let you handle arrays to manipulate this string (such as
@@ -188,7 +188,9 @@ endfunction
 " Uses __argCounter and __argSeparator local variables, so make sure you don't
 "   have variables with the same name in your function. You can also pass in a
 "   second optional argument which is used as the argument separator instead
-"   of the default ','.
+"   of the default ','. You need to make sure that the separator string itself
+"   can't occur as part of arguments, or use a sequence of characters that is
+"   hard to occur as separator.
 " Ex: 
 "   fu! s:IF(...)
 "     exec MakeArgumentList()
@@ -1523,12 +1525,12 @@ endfunction
 
 " BEGIN: Persistent settings {{{
 if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
-
-" Make sure the '!' option to store global variables that are upper cased are
-"   stored in viminfo file. Make sure it is the first option, so that it will
-"   not interfere with the 'n' option ("Todd J. Cosgrove"
-"     <todd dot cosgrove at softechnics dot com>).
-set viminfo^=!
+  " Make sure the '!' option to store global variables that are upper cased are
+  "   stored in viminfo file. Make sure it is the first option, so that it will
+  "   not interfere with the 'n' option ("Todd J. Cosgrove"
+  "     <todd dot cosgrove at softechnics dot com>).
+  set viminfo^=!
+endif
 
 " The pluginName and persistentVar have to be unique and are case insensitive.
 " Should be called from VimLeavePre. This simply creates a global variable which
@@ -1539,29 +1541,33 @@ set viminfo^=!
 " This feature uses the '!' option of viminfo, to avoid storing all the
 "   temporary and other plugin specific global variables getting saved.
 function! PutPersistentVar(pluginName, persistentVar, value)
-  let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
-  exec 'let ' . globalVarName . " = '" . a:value . "'"
+  if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
+    let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
+    exec 'let ' . globalVarName . " = '" . a:value . "'"
+  endif
 endfunction
 
 " Should be called from VimEnter. Simply reads the gloval variable for the
 "   value and returns it. Removed the variable from global space before
 "   returning the value, so should be called only once.
 function! GetPersistentVar(pluginName, persistentVar, default)
-  let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
-  if (exists(globalVarName))
-    exec 'let value = ' . globalVarName
-    exec 'unlet ' . globalVarName
+  if ! exists("g:genutilsNoPersist") || ! g:genutilsNoPersist
+    let globalVarName = s:PersistentVarName(a:pluginName, a:persistentVar)
+    if (exists(globalVarName))
+      exec 'let value = ' . globalVarName
+      exec 'unlet ' . globalVarName
+    else
+      let value = a:default
+    endif
+    return value
   else
-    let value = a:default
+    return default
   endif
-  return value
 endfunction
 
 function! s:PersistentVarName(pluginName, persistentVar)
   return 'g:GU_' . toupper(a:pluginName) . '_' . toupper(a:persistentVar)
 endfunction
-
-endif
 " END: Persistent settings }}}
 
 
