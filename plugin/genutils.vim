@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari Krishna Dara <hari_vim@yahoo.com>
-" Last Modified: 25-Mar-2002 @ 10:36
+" Last Modified: 27-Mar-2002 @ 19:07
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.19
+" Version: 1.0.20
 " Description:
 "   - A scriptlet to pass variable number of arguments to other functions.
 "   - Misc. window/buffer related functions, NumberOfWindows(),
@@ -236,7 +236,7 @@ endfunction
 
 
 function! ResetWindowSettings()
-  call RestoreWindowSettings2(s:myScriptId)
+  call ResetWindowSettings2(s:myScriptId)
 endfunction
 
 
@@ -299,7 +299,7 @@ function! RestoreWindowSettings2(sid)
   
   " Restore the current window.
   call MoveCursorToWindow(activeWindow)
-  call ResetWindowSettings()
+  call ResetWindowSettings2(a:sid)
   "unlet g:savedWindowSettings " Debug.
   call MvIterDestroy("savedWindowSettings")
 endfunction
