@@ -2,9 +2,9 @@
 " Useful buffer, file and window related functions.
 "
 " Author: Hari <hari_vim@yahoo.com>
-" Last Modified: 21-Jan-2002 @ 16:29
+" Last Modified: 04-Feb-2002 @ 18:49
 " Requires: Vim-6.0, multvals.vim(2.0.5)
-" Version: 1.0.7
+" Version: 1.0.8
 "
 
 "
@@ -67,6 +67,14 @@ function! MoveCursorToWindow(winno)
   if NumberOfWindows() != 1
     execute a:winno . " wincmd w"
   endif
+endfunction
+
+
+" Moves the current line such that it is going to be the nth line in the window
+"   without changing the column position.
+function! MoveCurLineToWinLine(n)
+  normal zt
+  execute "normal " . a:n . "\<C-Y>"
 endfunction
 
 
@@ -202,36 +210,67 @@ let s:escregexp = '/*^$.~\'
 
 " This method tries to save the position along with the line context if
 "   possible. This is like the vim builtin marker. Pass in a unique scriptid.
-function! SaveHardPositionWithContext(scriptid)
+function! SaveSoftPosition(scriptid)
   let s:startline_{a:scriptid} = getline(".")
   call SaveHardPosition(a:scriptid)
 endfunction
 
 
-function! RestoreHardPositionWithContext(scriptid)
+function! RestoreSoftPosition(scriptid)
   0
   if search('\m^'.escape(s:startline_{a:scriptid},s:escregexp),'W') <= 0
     call RestoreHardPosition(a:scriptid)
   else
     execute "normal!" s:col_{a:scriptid} . "|"
+    call MoveCurLineToWinLine(s:winline_{a:scriptid})
   endif
-  "unlet s:startline_{a:scriptid}
+endfunction
+
+
+function! ResetSoftPosition(scriptid)
+  unlet s:startline_{a:scriptid}
+endfunction
+
+
+" A synonym for SaveSoftPosition.
+function! SaveHardPositionWithContext(scriptid)
+  call SaveSoftPosition(a:scriptid)
+endfunction
+
+
+" A synonym for RestoreSoftPosition.
+function! RestoreHardPositionWithContext(scriptid)
+  call RestoreSoftPosition(a:scriptid)
+endfunction
+
+
+" A synonym for ResetSoftPosition.
+function! ResetHardPositionWithContext(scriptid)
+  call ResetSoftPosition(a:scriptid)
 endfunction
 
 
 " Useful when you want to go to the exact (line, col), but marking will not
-"   work. Pass in a unique scriptid.
+"   work, or if you simply don't want to disturb the marks. Pass in a unique
+"   scriptid.
 function! SaveHardPosition(scriptid)
   let s:col_{a:scriptid} = virtcol(".")
   let s:lin_{a:scriptid} = line(".")
+  let s:winline_{a:scriptid} = winline()
 endfunction
 
 
 function! RestoreHardPosition(scriptid)
   execute s:lin_{a:scriptid}
   execute "normal!" s:col_{a:scriptid} . "|"
-  "unlet s:col_{a:scriptid}
-  "unlet s:lin_{a:scriptid}
+  call MoveCurLineToWinLine(s:winline_{a:scriptid})
+endfunction
+
+
+function! ResetHardPosition(scriptid)
+  unlet s:col_{a:scriptid}
+  unlet s:lin_{a:scriptid}
+  unlet s:winline_{a:scriptid}
 endfunction
 
 ""
