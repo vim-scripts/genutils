@@ -2,7 +2,7 @@
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
 " Last Change: 02-Aug-2004 @ 09:58
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.14.0
+" Version: 1.15.1
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -97,6 +97,9 @@
 " String  GetBufNameForAu(String bufName)
 " void    MoveCursorToWindow(int winno)
 " void    MoveCurLineToWinLine(int winLine)
+" void    CloseWindow(int winnr, boolean force)
+" void    MarkActiveWindow()
+" void    RestoreActiveWindow()
 " void    IsOnlyVerticalWindow()
 " void    IsOnlyHorizontalWindow()
 " int     GetNextWinnrInStack(char dir)
@@ -173,6 +176,7 @@
 " boolean DefFileChangedShell()
 " void    SilentSubstitute(String pat, String cmd)
 " void    SilentDelete(String pat)
+" void    SilentDelete(String range, String pat)
 " String  GetSpacer(int width)
 "
 " Documentation With Function Prototypes:
@@ -207,11 +211,11 @@
 " Uses __argCounter and __argSeparator local variables, so make sure you don't
 "   have variables with the same name in your function. You can change the
 "   name of the resultant variable from the default 'argumentList' to
-"   something else, by passing the new name as the first argument. You can also pass in a
-"   second optional argument which is used as the argument separator instead
-"   of the default ','. You need to make sure that the separator string itself
-"   can't occur as part of arguments, or use a sequence of characters that is
-"   hard to occur as separator.
+"   something else, by passing the new name as the first argument. You can
+"   also pass in a second optional argument which is used as the argument
+"   separator instead of the default ','. You need to make sure that the
+"   separator string itself can't occur as part of arguments, or use a
+"   sequence of characters that is hard to occur, as separator.
 " Ex: 
 "   fu! s:IF(...)
 "     exec MakeArgumentList()
@@ -273,6 +277,42 @@
 "   without changing the column position.
 "
 " void    MoveCurLineToWinLine(int winLine)
+" -----------------------
+" Closes the given window and returns to the original window. It the simplest,
+" this is equivalent to:
+"
+"   let curWin = winnr()
+"   exec winnr 'wincmd w'
+"   close
+"   exec curWin 'wincmd w'
+"
+" But the function keeps track of the change in window numbers and restores
+" the current window correctly. It also restores the previous window (the
+" window that the cursor would jump to when executing "wincmd p" command).
+" This is something that all plugins should do while moving around in the
+" windows, behind the scenes.
+"
+" Pass 1 to force closing the window (:close!).
+"
+" void    CloseWindow(int winnr, boolean force)
+" -----------------------
+" Remembers the number of the current window as well as the previous-window
+" (the one the cursor would jump to when executing "wincmd p" command). To
+" determine the window number of the previous-window, the function temporarily
+" jumps to the previous-window, so if your script intends to avoid generating
+" unnecessary window events, consider disabling window events before calling
+" this function (see :h 'eventignore').
+"
+" void    MarkActiveWindow()
+" -----------------------
+" Restore the cursor to the window that was previously marked as "active", as
+" well as its previous-window (the one the cursor would jump to when executing
+" "wincmd p" command). To restore the window number of the previous-window,
+" the function temporarily jumps to the previous-window, so if your script
+" intends to avoid generating unnecessary window events, consider disabling
+" window events before calling this function (see :h 'eventignore').
+"
+" void    RestoreActiveWindow()
 " -----------------------
 " Returns 1 if the current window is the only window vertically.
 "
@@ -824,12 +864,16 @@
 " void    SilentSubstitute(String pat, String cmd)
 " -----------------------
 " Delete all lines matching the given pattern silently and without corrupting
-"   the search register.
+"   the search register. The range argument if passed should be a valid prefix
+"   for the :global command.
 " Ex:
 "   To delete all lines that are empty:
-"         call SilentDelete("^\s*$")
+"         call SilentDelete('^\s*$')
+"   To delete all lines that are empty only in the range 10 to 100:
+"         call SilentDelete('10,100', '^\s*$')
 "
 " void    SilentDelete(String pat)
+" void    SilentDelete(String range, String pat)
 " -----------------------
 " Can return a spacer from 0 to 80 characters width.
 "
@@ -850,7 +894,7 @@
 "       
 "   - Add the following commands to create simple sort commands.
 "       command! -nargs=0 -range=% SortByLength <line1>,<line2>call QSort(
-"           \ 'CmpByLengthNname', 1)
+"           \ 'CmpByLineLengthNname', 1)
 "       command! -nargs=0 -range=% RSortByLength <line1>,<line2>call QSort(
 "           \ 'CmpByLineLengthNname', -1)
 "       command! -nargs=0 -range=% SortJavaImports <line1>,<line2>call QSort(
@@ -905,7 +949,7 @@ if !exists('loaded_multvals') || loaded_multvals < 305
   echomsg 'genutils: You need a newer version of multvals.vim plugin'
   finish
 endif
-let loaded_genutils = 114
+let loaded_genutils = 115
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -1101,25 +1145,72 @@ function! MoveCurLineToWinLine(n)
   let &l:wrap = _wrap
 endfunction
 
+function! CloseWindow(win, force)
+  let _eventignore = &eventignore
+  try
+    set eventignore=all
+    call MarkActiveWindow()
+
+    let &eventignore = _eventignore
+    exec a:win 'wincmd w'
+    exec 'close'.(a:force ? '!' : '')
+    set eventignore=all
+
+    if a:win < s:curWinnr
+      let s:curWinnr = s:curWinnr - 1
+    endif
+    if a:win < s:prevWinnr
+      let s:prevWinnr = s:prevWinnr - 1
+    endif
+  finally
+    call RestoreActiveWindow()
+    let &eventignore = _eventignore
+  endtry
+endfunction
+
+function! MarkActiveWindow()
+  let s:curWinnr = winnr()
+  " We need to restore the previous-window also at the end.
+  wincmd p
+  let s:prevWinnr = winnr()
+  wincmd p
+endfunction
+
+function! RestoreActiveWindow()
+  if !exists('s:curWinnr')
+    return
+  endif
+
+  " Restore the original window.
+  if winnr() != s:curWinnr
+    exec s:curWinnr'wincmd w'
+  endif
+  if s:curWinnr != s:prevWinnr
+    exec s:prevWinnr'wincmd w'
+    wincmd p
+  endif
+endfunction
+
 function! IsOnlyVerticalWindow()
   let onlyVertWin = 1
   let _eventignore = &eventignore
+
   try
     "set eventignore+=WinEnter,WinLeave
     set eventignore=all
-    let curWinnr = winnr()
+    call MarkActiveWindow()
+
     wincmd j
-    if winnr() != curWinnr
-      wincmd k
+    if winnr() != s:curWinnr
       let onlyVertWin = 0
     else
       wincmd k
-      if winnr() != curWinnr
-	wincmd j
+      if winnr() != s:curWinnr
 	let onlyVertWin = 0
       endif
     endif
   finally
+    call RestoreActiveWindow()
     let &eventignore = _eventignore
   endtry
   return onlyVertWin
@@ -1128,21 +1219,20 @@ endfunction
 function! IsOnlyHorizontalWindow()
   let onlyHorizWin = 1
   let _eventignore = &eventignore
-  set eventignore=all
   try
-    let curWinnr = winnr()
+    set eventignore=all
+    call MarkActiveWindow()
     wincmd l
-    if winnr() != curWinnr
-      wincmd h
+    if winnr() != s:curWinnr
       let onlyHorizWin = 0
     else
       wincmd h
-      if winnr() != curWinnr
-	wincmd l
+      if winnr() != s:curWinnr
 	let onlyHorizWin = 0
       endif
     endif
   finally
+    call RestoreActiveWindow()
     let &eventignore = _eventignore
   endtry
   return onlyHorizWin
@@ -1160,8 +1250,10 @@ function! GetNextWinnrInStack(dir)
   let _eventignore = &eventignore
   try
     set eventignore=all
+    call MarkActiveWindow()
     let newwin = s:GetNextWinnrInStack(a:dir)
   finally
+    call RestoreActiveWindow()
     let &eventignore = _eventignore
   endtry
   return newwin
@@ -1175,11 +1267,11 @@ function! MoveCursorToLastInWinStack(dir)
 endfunction
 
 function! GetLastWinnrInStack(dir)
-  let curwin = winnr()
   let newwin = 0
   let _eventignore = &eventignore
   try
     set eventignore=all
+    call MarkActiveWindow()
     while 1
       let wn = s:GetNextWinnrInStack(a:dir)
       if wn != 0
@@ -1189,8 +1281,8 @@ function! GetLastWinnrInStack(dir)
         break
       endif
     endwhile
-    exec curwin 'wincmd w'
   finally
+    call RestoreActiveWindow()
     let &eventignore = _eventignore
   endtry
   return newwin
@@ -1221,7 +1313,6 @@ function! s:GetNextWinnrInStack(dir)
     if s:GetWinDim(a:dir, newwin) != orgdim
       " Window dimension has changed, indicates a move across window stacks.
       "call Decho("newwin=".newwin." height changed".winheight(newwin)."x".winwidth(newwin))
-      exec orgwin 'wincmd w'
       return 0
     endif
     " Determine if changing original window height affects current window
@@ -2221,8 +2312,7 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
     let high = a:end
 
     " Arbitrarily establish partition element at the midpoint of the data.
-    exec "let midStr = " . a:accessor . "(" . ((a:start + a:end) / 2) .
-          \ ", a:context)"
+    let midStr = {a:accessor}(((a:start + a:end) / 2), a:context)
 
     " Loop through the data until indices cross.
     while low <= high
@@ -2230,8 +2320,8 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
       " Find the first element that is greater than or equal to the partition
       "   element starting from the left Index.
       while low < a:end
-        exec "let str = " . a:accessor . "(" . low .  ", a:context)"
-        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        let str = {a:accessor}(low, a:context)
+        let result = {a:cmp}(str, midStr, a:direction)
         if result < 0
           let low = low + 1
         else
@@ -2242,8 +2332,8 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
       " Find an element that is smaller than or equal to the partition element
       "   starting from the right Index.
       while high > a:start
-        exec "let str = " . a:accessor . "(" . high .  ", a:context)"
-        exec "let result = " . a:cmp . "(str, midStr, " . a:direction . ")"
+        let str = {a:accessor}(high, a:context)
+        let result = {a:cmp}(str, midStr, a:direction)
         if result > 0
           let high = high - 1
         else
@@ -2254,7 +2344,7 @@ function! s:QSortR(start, end, cmp, direction, accessor, swapper, context)
       " If the indexes have not crossed, swap.
       if low <= high
         " Swap lines low and high.
-        exec "call " . a:swapper . "(" . high . ", " . low . ", a:context)"
+        call {a:swapper}(high, low, a:context)
         let low = low + 1
         let high = high - 1
       endif
@@ -2337,11 +2427,19 @@ function! SilentSubstitute(pat, cmd)
   endtry
 endfunction
 
-function! SilentDelete(pat)
+function! SilentDelete(arg1, ...)
+  " For backwards compatibility.
+  if a:0
+    let range = a:arg1
+    let pat = a:1
+  else
+    let range = ''
+    let pat = arg1
+  endif
   let _search = @/
   try
-    let @/ = a:pat
-    keepjumps silent! exec 'g//d _'
+    let @/ = pat
+    keepjumps silent! exec range'g//d _'
   finally
     let @/ = _search
   endtry
