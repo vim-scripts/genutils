@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 15-Mar-2005 @ 19:05
+" Last Change: 08-May-2006 @ 14:58
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.18.3
+" Version: 1.19.2
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -85,109 +85,109 @@
 "     being able to default to the Vim's standard behavior of asking the user.
 "     See perforce.vim for usage examples.
 "
-" Function Prototypes:
+"   Function Prototypes:
 "     The types in prototypes of the functions mimic Java.
 "     This is just a full list for a quick reference, see
 "       "Documentation With Function Prototypes" for more information on the
 "       functions.
 "
-" String  MakeArgumentString(...)
-" String  MakeArgumentList(...)
-" String  CreateArgString(String argList, String sep, ...)
-" void    DebugShowArgs(...)
-" String  ExtractFuncListing(String funcName, String hLines, String tLines)
-" int     NumberOfWindows()
-" int     FindBufferForName(String fileName)
-" String  GetBufNameForAu(String bufName)
-" void    MoveCursorToWindow(int winno)
-" void    MoveCurLineToWinLine(int winLine)
-" void    CloseWindow(int winnr, boolean force)
-" void    MarkActiveWindow()
-" void    RestoreActiveWindow()
-" void    IsOnlyVerticalWindow()
-" void    IsOnlyHorizontalWindow()
-" int     GetNextWinnrInStack(char dir)
-" int     GetLastWinnrInStack(char dir)
-" void    MoveCursorToNextInWinStack(char dir)
-" void    MoveCursorToLastInWinStack(char dir)
-" void    OpenWinNoEa(String openWinCmd)
-" void    CloseWinNoEa(int winnr, boolean force)
-" void    SetupScratchBuffer()
-" void    CleanDiffOptions()
-" boolean ArrayVarExists(String varName, int index)
-" void    MapAppendCascaded(String lhs, String rhs, String mapMode)
-" void    SaveWindowSettings()
-" void    RestoreWindowSettings()
-" void    ResetWindowSettings()
-" void    SaveWindowSettings2(String sid, boolean overwrite)
-" void    RestoreWindowSettings2(String scripid)
-" void    ResetWindowSettings2(String scripid)
-" void    SaveVisualSelection(String scripid)
-" void    RestoreVisualSelection(String scripid)
-" void    SaveSoftPosition(String scriptid)
-" void    RestoreSoftPosition(String scriptid)
-" void    ResetSoftPosition(String scriptid)
-" void    SaveHardPosition(String scriptid)
-" void    RestoreHardPosition(String scriptid)
-" void    ResetHardPosition(String scriptid)
-" int     GetLinePosition(String scriptid)
-" int     GetColPosition(String scriptid)
-" boolean IsPositionSet(String scriptid)
-" String  CleanupFileName(String fileName)
-" boolean OnMS()
-" boolean PathIsAbsolute(String path)
-" boolean PathIsFileNameOnly(String path)
-" void    AddNotifyWindowClose(String windowTitle, String functionName)
-" void    RemoveNotifyWindowClose(String windowTitle)
-" void    CheckWindowClose()
-" void    ShowLinesWithSyntax() range
-" void    ShiftWordInSpace(int direction)
-" void    CenterWordInSpace()
-" void    QSort(String cmp, int direction) range
-" void    QSort2(int start, int end, String cmp, int direction,
-"                String accessor, String swapper, String context)
-" int     BinSearchForInsert(int start, int end, String line, String cmp,
-"                            int direction)
-" int     BinSearchForInsert2(int start, int end, line, String cmp,
-"                             int direction, String accessor, String context)
-" void    BinInsertSort(String cmp, int direction) range
-" void    BinInsertSort2(int start, int end, String cmp, int direction,
-"                String accessor, String mover, String context)
-" String  CommonPath(String path1, String path2)
-" String  CommonString(String str1, String str2)
-" String  RelPathFromFile(String srcFile, String tgtFile)
-" String  RelPathFromDir(String srcDir, String tgtFile)
-" String  Roman2Decimal(String str)
-" String  Escape(String str, String chars)
-" String  UnEscape(String str, String chars)
-" String  DeEscape(String str)
-" String  EscapeCommand(String cmd, String args, String pipe)
-" int     GetShellEnvType()
-" String  ExpandStr(String str)
-" String  QuoteStr(String str)
-" boolean CurLineHasSign()
-" void    ClearAllSigns()
-" String  UserFileComplete(String ArgLead, String CmdLine, String CursorPos,
-"                          String smartSlash, String searchPath)
-" String  UserFileExpand(String fileArgs)
-" String  GetVimCmdOutput(String cmd)
-" void    OptClearBuffer()
-" int     GetPreviewWinnr()
-" void    PutPersistentVar(String pluginName, String persistentVar,
-"                          String value)
-" void    GetPersistentVar(String pluginName, String persistentVar,
-"                          String default)
-" void    AddToFCShellPre(String funcName)
-" void    RemoveFromFCShellPre(String funcName)
-" void    AddToFCShell(String funcName)
-" void    RemoveFromFCShell(String funcName)
-" void    DefFCShellInstall()
-" void    DefFCShellUninstall()
-" boolean DefFileChangedShell()
-" void    SilentSubstitute(String pat, String cmd)
-" void    SilentDelete(String pat)
-" void    SilentDelete(String range, String pat)
-" String  GetSpacer(int width)
+"   String  MakeArgumentString(...)
+"   String  MakeArgumentList(...)
+"   String  CreateArgString(String argList, String sep, ...)
+"   void    DebugShowArgs(...)
+"   String  ExtractFuncListing(String funcName, String hLines, String tLines)
+"   int     NumberOfWindows()
+"   int     FindBufferForName(String fileName)
+"   String  GetBufNameForAu(String bufName)
+"   void    MoveCursorToWindow(int winno)
+"   void    MoveCurLineToWinLine(int winLine)
+"   void    CloseWindow(int winnr, boolean force)
+"   void    MarkActiveWindow()
+"   void    RestoreActiveWindow()
+"   void    IsOnlyVerticalWindow()
+"   void    IsOnlyHorizontalWindow()
+"   int     GetNextWinnrInStack(char dir)
+"   int     GetLastWinnrInStack(char dir)
+"   void    MoveCursorToNextInWinStack(char dir)
+"   void    MoveCursorToLastInWinStack(char dir)
+"   void    OpenWinNoEa(String openWinCmd)
+"   void    CloseWinNoEa(int winnr, boolean force)
+"   void    SetupScratchBuffer()
+"   void    CleanDiffOptions()
+"   boolean ArrayVarExists(String varName, int index)
+"   void    MapAppendCascaded(String lhs, String rhs, String mapMode)
+"   void    SaveWindowSettings()
+"   void    RestoreWindowSettings()
+"   void    ResetWindowSettings()
+"   void    SaveWindowSettings2(String sid, boolean overwrite)
+"   void    RestoreWindowSettings2(String scripid)
+"   void    ResetWindowSettings2(String scripid)
+"   void    SaveVisualSelection(String scripid)
+"   void    RestoreVisualSelection(String scripid)
+"   void    SaveSoftPosition(String id)
+"   void    RestoreSoftPosition(String id)
+"   void    ResetSoftPosition(String id)
+"   void    SaveHardPosition(String id)
+"   void    RestoreHardPosition(String id)
+"   void    ResetHardPosition(String id)
+"   int     GetLinePosition(String id)
+"   int     GetColPosition(String id)
+"   boolean IsPositionSet(String id)
+"   String  CleanupFileName(String fileName)
+"   boolean OnMS()
+"   boolean PathIsAbsolute(String path)
+"   boolean PathIsFileNameOnly(String path)
+"   void    AddNotifyWindowClose(String windowTitle, String functionName)
+"   void    RemoveNotifyWindowClose(String windowTitle)
+"   void    CheckWindowClose()
+"   void    ShowLinesWithSyntax() range
+"   void    ShiftWordInSpace(int direction)
+"   void    CenterWordInSpace()
+"   void    QSort(String cmp, int direction) range
+"   void    QSort2(int start, int end, String cmp, int direction,
+"                  String accessor, String swapper, String context)
+"   int     BinSearchForInsert(int start, int end, String line, String cmp,
+"                              int direction)
+"   int     BinSearchForInsert2(int start, int end, line, String cmp,
+"                               int direction, String accessor, String context)
+"   void    BinInsertSort(String cmp, int direction) range
+"   void    BinInsertSort2(int start, int end, String cmp, int direction,
+"                  String accessor, String mover, String context)
+"   String  CommonPath(String path1, String path2)
+"   String  CommonString(String str1, String str2)
+"   String  RelPathFromFile(String srcFile, String tgtFile)
+"   String  RelPathFromDir(String srcDir, String tgtFile)
+"   String  Roman2Decimal(String str)
+"   String  Escape(String str, String chars)
+"   String  UnEscape(String str, String chars)
+"   String  DeEscape(String str)
+"   String  EscapeCommand(String cmd, String args, String pipe)
+"   int     GetShellEnvType()
+"   String  ExpandStr(String str)
+"   String  QuoteStr(String str)
+"   boolean CurLineHasSign()
+"   void    ClearAllSigns()
+"   String  UserFileComplete(String ArgLead, String CmdLine, String CursorPos,
+"                            String smartSlash, String searchPath)
+"   String  UserFileExpand(String fileArgs)
+"   String  GetVimCmdOutput(String cmd)
+"   void    OptClearBuffer()
+"   int     GetPreviewWinnr()
+"   void    PutPersistentVar(String pluginName, String persistentVar,
+"                            String value)
+"   void    GetPersistentVar(String pluginName, String persistentVar,
+"                            String default)
+"   void    AddToFCShellPre(String funcName)
+"   void    RemoveFromFCShellPre(String funcName)
+"   void    AddToFCShell(String funcName)
+"   void    RemoveFromFCShell(String funcName)
+"   void    DefFCShellInstall()
+"   void    DefFCShellUninstall()
+"   boolean DefFileChangedShell()
+"   void    SilentSubstitute(String pat, String cmd)
+"   void    SilentDelete(String pat)
+"   void    SilentDelete(String range, String pat)
+"   String  GetSpacer(int width)
 "
 " Documentation With Function Prototypes:
 " -----------------------
@@ -449,25 +449,25 @@
 "
 " void    ResetWindowSettings()
 " -----------------------
-" Same as SaveWindowSettings, but uses the passed in scriptid to create a
-"   private copy for the calling script. Pass in a unique scriptid to avoid
+" Same as SaveWindowSettings, but uses the passed in id to create a
+"   private copy for the calling script. Pass in a unique id to avoid
 "   conflicting with other callers. If overwrite is zero and if the settings
 "   are already stored for the passed in sid, it will overwrite previously
 "   saved settings.
 "
 " void    SaveWindowSettings2(String sid, boolean overwrite)
 " -----------------------
-" Same as RestoreWindowSettings, but uses the passed in scriptid to get the
+" Same as RestoreWindowSettings, but uses the passed in id to get the
 "   settings. The settings must have been previously saved using this
-"   scriptid. Call ResetWindowSettings2() to explicitly reset the saved
+"   id. Call ResetWindowSettings2() to explicitly reset the saved
 "   settings.
 "
-" void    RestoreWindowSettings2(String scripid)
+" void    RestoreWindowSettings2(String id)
 " -----------------------
 " Reset the previously saved window settings using SaveWindowSettings2.
 "   Releases the variables.
 "
-" void    ResetWindowSettings2(String scripid)
+" void    ResetWindowSettings2(String id)
 " -----------------------
 " -----------------------
 " Save the current/last visual selection such that it can be later restored
@@ -476,19 +476,19 @@
 "   are not associated with the window so you can later restore the selection
 "   in any window, provided there are enough lines/columns.
 "
-" void    SaveVisualSelection(String scripid)
+" void    SaveVisualSelection(String id)
 " -----------------------
 " Restore the visual selection that was previuosly saved using
 "   SaveVisualSelection().
 "
-" void    RestoreVisualSelection(String scripid)
+" void    RestoreVisualSelection(String id)
 " -----------------------
 " -----------------------
 " This method tries to save the hard position along with the line context This
-"   is like the vim builtin marker. Pass in a unique scriptid to avoid
+"   is like the vim builtin marker. Pass in a unique id to avoid
 "   conflicting with other callers.
 "
-" void    SaveSoftPosition(String scriptid)
+" void    SaveSoftPosition(String id)
 " -----------------------
 " Restore the cursor position using the information saved by the previous call
 "   to SaveSoftPosition. This first calls RestoreHardPosition() and then
@@ -500,43 +500,43 @@
 "   moved up or down. However, if there are identical lines in the buffer and
 "   the original line has moved, this function might get confused.
 "
-" void    RestoreSoftPosition(String scriptid)
+" void    RestoreSoftPosition(String id)
 " -----------------------
 " Reset the previously cursor position using SaveSoftPosition. Releases the
 "   variables.
 "
-" void    ResetSoftPosition(String scriptid)
+" void    ResetSoftPosition(String id)
 " -----------------------
 " Useful when you want to go to the exact (line, col), but marking will not
 "   work, or if you simply don't want to disturb the marks. Pass in a unique
-"   scriptid.
+"   id.
 "
-" void    SaveHardPosition(String scriptid)
+" void    SaveHardPosition(String id)
 " -----------------------
 " Restore the cursor position using the information saved by the previous call
 "   to SaveHardPosition. 
 "
-" void    RestoreHardPosition(String scriptid)
+" void    RestoreHardPosition(String id)
 " -----------------------
 " Reset the previously cursor position using SaveHardPosition. Releases the
 "   variables.
 "
-" void    ResetHardPosition(String scriptid)
+" void    ResetHardPosition(String id)
 " -----------------------
-" Return the line number of the previously saved position for the scriptid.
+" Return the line number of the previously saved position for the id.
 "   This is like calling line() builtin function for a mark.
 "
-" int     GetLinePosition(String scriptid)
+" int     GetLinePosition(String id)
 " -----------------------
-" Return the column number of the previously saved position for the scriptid.
+" Return the column number of the previously saved position for the id.
 "   This is like calling col() builtin function for a mark.
 "
-" int     GetColPosition(String scriptid)
+" int     GetColPosition(String id)
 " -----------------------
 " A convenience function to check if a position has been saved (and not reset)
-"   using the scriptid given.
+"   using the id given.
 "
-" boolean IsPositionSet(String scriptid)
+" boolean IsPositionSet(String id)
 " -----------------------
 " -----------------------
 " Cleanup file name such that two *cleaned up* file names are easy to be
@@ -1031,7 +1031,7 @@ if !exists('loaded_multvals') || loaded_multvals < 305
   echomsg 'genutils: You need a newer version of multvals.vim plugin'
   finish
 endif
-let loaded_genutils = 118
+let loaded_genutils = 119
 
 " Make sure line-continuations won't cause any problem. This will be restored
 "   at the end
@@ -1253,9 +1253,9 @@ endfunction
 function! MarkActiveWindow()
   let s:curWinnr = winnr()
   " We need to restore the previous-window also at the end.
-  wincmd p
+  silent! wincmd p
   let s:prevWinnr = winnr()
-  wincmd p
+  silent! wincmd p
 endfunction
 
 function! RestoreActiveWindow()
@@ -1610,16 +1610,16 @@ endfunction
 
 " Save/Restore window settings {{{
 function! SaveWindowSettings()
-  call SaveWindowSettings2(s:myScriptId, 1)
+  call SaveWindowSettings2('SaveWindowSettings', 1)
 endfunction
 
 function! RestoreWindowSettings()
-  call RestoreWindowSettings2(s:myScriptId)
+  call RestoreWindowSettings2('SaveWindowSettings')
 endfunction
 
 
 function! ResetWindowSettings()
-  call ResetWindowSettings2(s:myScriptId)
+  call ResetWindowSettings2('SaveWindowSettings')
 endfunction
 
 function! SaveWindowSettings2(sid, overwrite)
@@ -1824,72 +1824,80 @@ delfunc s:MyScriptId " Not required any more.
 
 "" --- START save/restore position. {{{
 
-function! SaveSoftPosition(scriptid)
-  let b:sp_startline_{a:scriptid} = getline(".")
-  call SaveHardPosition(a:scriptid)
+function! SaveSoftPosition(id)
+  let b:sp_startline_{a:id} = getline(".")
+  call SaveHardPosition(a:id)
 endfunction
 
-function! RestoreSoftPosition(scriptid)
+function! RestoreSoftPosition(id)
   0
-  call RestoreHardPosition(a:scriptid)
-  let stLine = b:sp_startline_{a:scriptid}
+  call RestoreHardPosition(a:id)
+  let stLine = b:sp_startline_{a:id}
   if getline('.') !=# stLine
     if ! search('\V\^'.escape(stLine, "\\").'\$', 'W') 
       call search('\V\^'.escape(stLine, "\\").'\$', 'bW')
     endif
   endif
-  call MoveCurLineToWinLine(b:sp_winline_{a:scriptid})
+  call MoveCurLineToWinLine(b:sp_winline_{a:id})
 endfunction
 
-function! ResetSoftPosition(scriptid)
-  unlet b:sp_startline_{a:scriptid}
+function! ResetSoftPosition(id)
+  unlet b:sp_startline_{a:id}
 endfunction
 
 " A synonym for SaveSoftPosition.
-function! SaveHardPositionWithContext(scriptid)
-  call SaveSoftPosition(a:scriptid)
+function! SaveHardPositionWithContext(id)
+  call SaveSoftPosition(a:id)
 endfunction
 
 " A synonym for RestoreSoftPosition.
-function! RestoreHardPositionWithContext(scriptid)
-  call RestoreSoftPosition(a:scriptid)
+function! RestoreHardPositionWithContext(id)
+  call RestoreSoftPosition(a:id)
 endfunction
 
 " A synonym for ResetSoftPosition.
-function! ResetHardPositionWithContext(scriptid)
-  call ResetSoftPosition(a:scriptid)
+function! ResetHardPositionWithContext(id)
+  call ResetSoftPosition(a:id)
 endfunction
 
-function! SaveHardPosition(scriptid)
-  let b:sp_col_{a:scriptid} = virtcol(".")
-  let b:sp_lin_{a:scriptid} = line(".")
-  let b:sp_winline_{a:scriptid} = winline()
+function! SaveHardPosition(id)
+  let b:sp_col_{a:id} = virtcol(".")
+  let b:sp_lin_{a:id} = line(".")
+  let b:sp_winline_{a:id} = winline()
 endfunction
 
-function! RestoreHardPosition(scriptid)
+function! RestoreHardPosition(id)
   " This doesn't take virtual column.
-  "call cursor(b:sp_lin_{a:scriptid}, b:sp_col_{a:scriptid})
-  execute b:sp_lin_{a:scriptid}
-  execute "normal!" b:sp_col_{a:scriptid} . "|"
-  call MoveCurLineToWinLine(b:sp_winline_{a:scriptid})
+  "call cursor(b:sp_lin_{a:id}, b:sp_col_{a:id})
+  " Vim7 generates E16 if line number is invalid.
+  " TODO: Why is this leaving cursor on the last-but-one line when the
+  " condition meets?
+  execute ((line('$') < b:sp_lin_{a:scriptid}) ? line('$') :
+        \ b:sp_lin_{a:scriptid})
+  "execute b:sp_lin_{a:scriptid}
+  execute ((line('$') < b:sp_lin_{a:id}) ? line('$') :
+        \ b:sp_lin_{a:id})
+  "execute b:sp_lin_{a:id}
+  execute "normal!" b:sp_col_{a:id} . "|"
+  call MoveCurLineToWinLine(b:sp_winline_{a:id})
 endfunction
 
-function! ResetHardPosition(scriptid)
-  unlet b:sp_col_{a:scriptid}
-  unlet b:sp_lin_{a:scriptid}
-  unlet b:sp_winline_{a:scriptid}
+function! ResetHardPosition(id)
+  unlet b:sp_col_{a:id}
+  unlet b:sp_lin_{a:id}
+  unlet b:sp_winline_{a:id}
 endfunction
 
-function! GetLinePosition(scriptid)
-  return b:sp_lin_{a:scriptid}
+function! GetLinePosition(id)
+  return b:sp_lin_{a:id}
 endfunction
 
-function! GetColPosition(scriptid)
-  return b:sp_col_{a:scriptid}
+function! GetColPosition(id)
+  return b:sp_col_{a:id}
 endfunction
 
-function! IsPositionSet(scriptid)
-  return exists('b:sp_col_' . a:scriptid)
+function! IsPositionSet(id)
+  return exists('b:sp_col_' . a:id)
 endfunction
 
 "" --- END save/restore position. }}}
