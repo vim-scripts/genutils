@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara <hari_vim at yahoo dot com>
-" Last Change: 08-May-2006 @ 14:58
+" Last Change: 09-May-2006 @ 10:44
 " Requires: Vim-6.3, multvals.vim(3.5)
-" Version: 1.19.2
+" Version: 1.20.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -1872,8 +1872,8 @@ function! RestoreHardPosition(id)
   " Vim7 generates E16 if line number is invalid.
   " TODO: Why is this leaving cursor on the last-but-one line when the
   " condition meets?
-  execute ((line('$') < b:sp_lin_{a:scriptid}) ? line('$') :
-        \ b:sp_lin_{a:scriptid})
+  execute ((line('$') < b:sp_lin_{a:id}) ? line('$') :
+        \ b:sp_lin_{a:id})
   "execute b:sp_lin_{a:scriptid}
   execute ((line('$') < b:sp_lin_{a:id}) ? line('$') :
         \ b:sp_lin_{a:id})
