@@ -28,7 +28,7 @@ let g:makeArgumentList = 'exec genutils#MakeArgumentList()'
 let s:makeArgumentString = ''
 function! genutils#MakeArgumentString(...)
   if s:makeArgumentString == ''
-    let s:makeArgumentString = genutils#ExtractFuncListing(s:myScriptId.
+    let s:makeArgumentString = genutils#ExtractFuncListing(s:SNR().
           \ '_makeArgumentString', 0, 0)
   endif
   if a:0 > 0 && a:1 != ''
@@ -42,7 +42,7 @@ endfunction
 let s:makeArgumentList = ''
 function! genutils#MakeArgumentList(...)
   if s:makeArgumentList == ''
-    let s:makeArgumentList = genutils#ExtractFuncListing(s:myScriptId.
+    let s:makeArgumentList = genutils#ExtractFuncListing(s:SNR().
           \ '_makeArgumentList', 0, 0)
   endif
   if a:0 > 0 && a:1 != ''
@@ -800,17 +800,13 @@ function! genutils#PathIsFileNameOnly(path)
   return (match(a:path, "\\") < 0) && (match(a:path, "/") < 0)
 endfunction
 
-
-" Copy this method into your script and rename it to find the script id of the
-"   current script.
-function! s:MyScriptId()
-  map <SID>xx <SID>xx
-  let s:sid = maparg("<SID>xx")
-  unmap <SID>xx
-  return substitute(s:sid, "xx$", "", "")
-endfunction
-let s:myScriptId = s:MyScriptId()
-delfunc s:MyScriptId " Not required any more.
+let s:mySNR = ''
+function s:SNR()
+  if s:mySNR == ''
+    let s:mySNR = matchstr(expand('<sfile>'), '<SNR>\d\+_\zeSNR$')
+  endif
+  return s:mySNR
+endfun
 
 
 "" --- START save/restore position. {{{
@@ -906,12 +902,9 @@ endfunction
 "" --- START: Notify window close -- {{{
 ""
 
+let s:notifyWindow = {}
 function! genutils#AddNotifyWindowClose(windowTitle, functionName)
   let bufName = a:windowTitle
-
-  if !exists("s:notifyWindow")
-    let s:notifyWindow = {}
-  endif
 
   let s:notifyWindow[bufName] = a:functionName
 
@@ -928,11 +921,9 @@ endfunction
 function! genutils#RemoveNotifyWindowClose(windowTitle)
   let bufName = a:windowTitle
 
-  if exists("s:notifyWindow") && has_key(s:notifyWindow, bufName)
-    unlet s:notifyWindow[bufName]
+  if has_key(s:notifyWindow, bufName)
+    call remove(s:notifyWindow, bufName)
     if len(s:notifyWindow) == 0
-      unlet s:notifyWindowTitles
-      unlet s:notifyWindowFunctions
       "unlet g:notifyWindow " Debug.
   
       aug NotifyWindowClose
@@ -1467,6 +1458,21 @@ function! genutils#BinSearchForInsert2(start, end, line, cmp, direction,
   while start < end
     let middle = (start + end + 1) / 2
     let result = {a:cmp}({a:accessor}(middle, a:context), a:line, a:direction)
+    if result < 0
+      let start = middle
+    else
+      let end = middle - 1
+    endif
+  endwhile
+  return start
+endfunction
+
+function! genutils#BinSearchList(list, start, end, item, cmp)
+  let start = a:start - 1
+  let end = a:end
+  while start < end
+    let middle = (start + end + 1) / 2
+    let result = call(a:cmp, [get(a:list, middle), a:item])
     if result < 0
       let start = middle
     else

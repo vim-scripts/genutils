@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara (hari_vim at yahoo dot com)
-" Last Change: 23-Jun-2006 @ 13:04
+" Last Change: 23-Jun-2006 @ 17:41
 " Requires: Vim-7.0
-" Version: 2.0.5
+" Version: 2.1.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -24,13 +24,6 @@
 "
 " Description:
 "   - Read the "Documentation With Function Prototypes" section below.
-"   - Functions genutils#MakeArgumentString(), genutils#MakeArgumentList() and
-"     genutils#CreateArgString() to work with and pass variable number of
-"     arguments to other functions.
-"     There is also an genutils#ExtractFuncListing() function that is used by
-"     the above functions to create snippets (see also breakpts.vim,
-"     ntservices.vim and ntprocesses.vim for interesting ideas on how to use
-"     this function).
 "   - Misc. window/buffer related functions, genutils#NumberOfWindows(),
 "     genutils#FindBufferForName(), genutils#MoveCursorToWindow(),
 "     genutils#MoveCurLineToWinLine(), genutils#SetupScratchBuffer(),
@@ -53,14 +46,14 @@
 "     genutils#AlignWordWithWordInPreviousLine() utility functions to move
 "     words in the space without changing the width of the field. A
 "     genutils#GetSpacer() function to return a spacer of specified width.
-"   - A quick-sort functions genutils#QSort() that can sort a buffer contents
-"     by range and genutils#QSort2() that can sort any arbitrary data and
-"     utility compare methods.  Binary search functions
-"     genutils#BinSearchForInsert() and genutils#BinSearchForInsert2() to find
-"     the location for a newline to be inserted in an already sorted buffer or
-"     arbitrary data.
+"   - Binary search function genutils#BinSearchList() for sorted lists, to
+"     find the index after which a given item can be inserted to keep the list
+"     in sorted order. You can also use these functions to just search for
+"     boundaries.
+"     There are also a couple of functions genutils#BinSearchForInsert() and
+"     genutils#BinSearchForInsert2() to find the location for a newline to be
+"     inserted in an already sorted buffer or arbitrary data.
 "   - ExecMap function has now been separated as a plugin called execmap.vim.
-"   - A sample function to extract the scriptId of a script.
 "   - New genutils#CommonPath() function to extract the common part of two
 "     paths, and genutils#RelPathFromFile() and genutils#RelPathFromDir() to
 "     find relative paths (useful HTML href's). A side effect is the
@@ -87,13 +80,16 @@
 "     It also provides hooks to get call backs before and after handling the
 "     default FileChangedShell autocommand (effectively splitting it into a
 "     Pre and a Post event). Suggested usage is to use
-"     genutils#AddToFCShellPre() or genutils#AddToFCShell() and either install
-"     a default event handling mechanism for all files by calling
-"     genutils#DefFCShellInstall() or create your own autocommand on a
-"     matching pattern to call genutils#DefFileChangedShell() function. Most
-"     useful for the source control plugins to conditionally reload a file,
-"     while being able to default to the Vim's standard behavior of asking the
-"     user. See perforce.vim for usage examples.
+"     genutils#AddToFCShellPre() and either install a default event handling
+"     mechanism for all files by calling genutils#DefFCShellInstall() or
+"     create your own autocommand on a matching pattern to call
+"     genutils#DefFileChangedShell() function. Most useful for the source
+"     control plugins to conditionally reload a file, while being able to
+"     default to the Vim's standard behavior of asking the user. See
+"     perforce.vim for usage examples.
+"   - Utility function genutils#ExtractFuncListing() that is useful to to
+"     create snippets (see breakpts.vim, ntservices.vim and ntprocesses.vim
+"     for interesting ideas on how to use this function).
 "
 "   Function Prototypes:
 "       The types in prototypes of the functions mimic Java.
@@ -101,9 +97,6 @@
 "         "Documentation With Function Prototypes" for more information on the
 "         functions.
 "
-"   String  genutils#MakeArgumentString(...)
-"   String  genutils#MakeArgumentList(...)
-"   String  genutils#CreateArgString(String argList, String sep, ...)
 "   void    genutils#DebugShowArgs(...)
 "   String  genutils#ExtractFuncListing(String funcName, String hLines, String tLines)
 "   int     genutils#NumberOfWindows()
@@ -154,9 +147,8 @@
 "   void    genutils#ShowLinesWithSyntax() range
 "   void    genutils#ShiftWordInSpace(int direction)
 "   void    genutils#CenterWordInSpace()
-"   void    genutils#QSort(String cmp, int direction) range
-"   void    genutils#QSort2(int start, int end, String cmp, int direction,
-"                  String accessor, String swapper, String context)
+"   int     genutils#BinSearchList(List list, int start, int end, Object item,
+"                              [Funcref|String] cmp, int direction)
 "   int     genutils#BinSearchForInsert(int start, int end, String line,
 "                              String cmp, int direction)
 "   int     genutils#BinSearchForInsert2(int start, int end, line, String cmp,
@@ -204,63 +196,6 @@
 "   int     genutils#GetSelectedIndex()
 "
 " Documentation With Function Prototypes:
-" -----------------------
-" Execute the function return value to create a local variable called
-"   'argumentString' containsing all your variable number of arguments that
-"   are passed to your function, such a way that it can be passed further down
-"   to another function as arguments.
-" Uses __argCounter and __nextArg local variables, so make sure you don't have
-"   variables with the same name in your function. If you want to change the
-"   name of the resultant variable from the default 'argumentString' to
-"   something else, you can pass the new name as an argument.
-" Ex:
-"   fu! s:IF(...)
-"     exec genutils#MakeArgumentString()
-"     exec "call Impl(1, " . argumentString . ")"
-"   endfu
-"
-" String  genutils#MakeArgumentString(...)
-" -----------------------
-" Execute the function return value to create a local variable called
-"   'argumentList' containsing all your variable number of arguments that
-"   are passed to your function, such a way that it can manipulated as an
-"   array list separated by commas before passing further down to another
-"   function as arguments. Once manipulated, the string can be passed to
-"   genutils#CreateArgString() function to make an argument string which can be
-"   used just like the 'argumentString' as mentioned in the documentation on
-"   genutils#MakeArgumentString(). To manipulate 'argumentList' you can use
-"   multvals.vim script.
-" Unlike genutils#MakeArgumentString(), this doesn't preserve the argument types
-"   (string vs number).
-" Uses __argCounter and __argSeparator local variables, so make sure you don't
-"   have variables with the same name in your function. You can change the
-"   name of the resultant variable from the default 'argumentList' to
-"   something else, by passing the new name as the first argument. You can
-"   also pass in a second optional argument which is used as the argument
-"   separator instead of the default ','. You need to make sure that the
-"   separator string itself can't occur as part of arguments, or use a
-"   sequence of characters that is hard to occur, as separator.
-" Ex: 
-"   fu! s:IF(...)
-"     exec genutils#MakeArgumentList()
-"     exec "call Impl(1, " . genutils#CreateArgString(argumentList, ',') . ")"
-"   endfu
-"
-" String  genutils#MakeArgumentList(...)
-" -----------------------
-" Useful to collect arguments into a soft-array (see multvals on vim.sf.net)
-"   and then pass them to a function later.
-" You should make sure that the separator itself doesn't exist in the
-"   arguments. You can use the return value same as the way argumentString
-"   created by the "exec g:makeArgumentString" above is used. If the separator
-"   is a pattern, you should pass in an optional additional argument, which
-"   is an arbitrary string that is guaranteed to match the pattern, as a
-"   sample separator (see multvals.vim for details).
-" Usage:
-"     let args = 'a b c' 
-"     exec "call F(" . genutils#CreateArgString(args, ' ') . ")"
-"
-" String  genutils#CreateArgString(String argList, String sep, ...)
 " -----------------------
 " Useful function to debug passing arguments to functions. See exactly what
 "   you would receive on the other side.
@@ -625,33 +560,30 @@
 " void    genutils#CenterWordInSpace()
 " -----------------------
 " -----------------------
-" Sorts a range of lines in the current buffer, in the given range, using the
-"   comparator that is passed in. The comparator function should accept the
-"   two lines that needs to be compared and the direction as arguments and
-"   return -1, 0 or 1. Pass 1 or -1 for direction to mean asending or
-"   descending order. The function should be accessible from the script's
-"   local context. The plugin also defines the following comparators that you
-"   can use: genutils#CmpByString, genutils#CmpByStringIgnoreCase,
-"   genutils#CmpByNumber, genutils#CmpByLength, genutils#CmpByLineLengthNname,
-"   genutils#CmpJavaImports
+" Given a sorted list of items, search for the index after which the given
+"   item can be inserted. The comparator function is exactly same as for the
+"   sort() function.
 "
-" void    genutils#QSort(String cmp, int direction) range
-" -----------------------
-" This is a more generic version of genutils#QSort, that will let you provide
-"   your own accessor and swapper, so that you can extend the sorting to
-"   something beyond the current buffer lines. See multvals.vim plugin for
-"   example usage.
+" Returns (start-1) when the item is smaller than the first item, or an index
+"   which is in the range of (start, end) inclusive. When start is 0, and item
+"   comes before list[0], you will get -1, which you shouldn't confuse with
+"   list -ve indexes.
 "
-" The swapper is called with the two indices that need to be swapped, along
-" with the context, something like this:
-"     function! CustomSwapper(ind1, ind2, context)
+" Ex:
+"     echo genutils#BinSearchList(range(1, 100, 10), 0, 10, 'NumberCompare')
+"     
+"     function! NumberCompare(n1, n2)
+"       if a:n1 == a:n2
+"         return 0
+"       elseif a:n1 < a:n2
+"         return -1
+"       else
+"         return 1
+"       endif
+"     endfunction
 "
-" This is based up on the sort functions given as part of examples in the
-"   eval.txt file, however this rectifies a bug in the original algorithm and
-"   makes it generic too.
-"
-" void    genutils#QSort2(int start, int end, String cmp, int direction,
-"                String accessor, String swapper, String context)
+"   int     genutils#BinSearchList(List list, int start, int end, Object item,
+"                              [Funcref|String] cmp)
 " -----------------------
 " Return the line number where given line can be inserted in the current
 "   buffer. This can also be interpreted as the line in the current buffer
@@ -659,8 +591,8 @@
 " Assumes that the lines are already sorted in the given direction using the
 "   given comparator.
 "
-" int     genutils#BinSearchForInsert(int start, int end, String line, String cmp,
-"                            int direction)
+" int     genutils#BinSearchForInsert(int start, int end, String line,
+"                            String cmp, int direction)
 " -----------------------
 " A more generic implementation of genutils#BinSearchForInsert, which doesn't
 "   restrict the search to the current buffer.
@@ -933,15 +865,6 @@
 " Same as genutils#AddToFCShellPre except that the function is called after
 "   the event is processed, so this is like a fictitious FileChangedShellPost
 "   event.
-"
-" void    genutils#AddToFCShell(String funcName)
-" -----------------------
-" Remove the given function previously added by calling genutils#AddToFCShell.
-"
-" void    genutils#RemoveFromFCShell(String funcName)
-" -----------------------
-" The plugin provides a default autocommand handler which can be installed
-"   by calling this function. 
 " 
 " void    genutils#DefFCShellInstall()
 " -----------------------
@@ -954,14 +877,14 @@
 " void    genutils#DefFCShellUninstall()
 " -----------------------
 " This function emulates the Vim's default behavior when a |timestamp| change
-"   is detected. Register your functions by calling genutils#AddToFCShellPre or
-"   genutils#AddToFCShell and have this function called during the
-"   FileChangedShell event (or just install the default handler by calling
-"   genutils#DefFCShellInstall).  From your callbacks, return 1 to mean
-"   autoread, 0 to mean noautoread and -1 to mean system default (or ignore).
-"   The return value of this method is 1 if the file was reloaded and 0
-"   otherwise. The return value of all the functions is ORed to determine the
-"   effective autoread value. See my perforce plugin for usage example.
+"   is detected. Register your functions by calling genutils#AddToFCShellPre
+"   and have this function called during the FileChangedShell event (or just
+"   install the default handler by calling genutils#DefFCShellInstall).  From
+"   your callbacks, return 1 to mean autoread, 0 to mean noautoread and -1 to
+"   mean system default (or ignore).  The return value of this method is 1 if
+"   the file was reloaded and 0 otherwise. The return value of all the
+"   functions is ORed to determine the effective autoread value. See my
+"   perforce plugin for usage example.
 "
 " boolean genutils#DefFileChangedShell()
 " -----------------------
@@ -1029,15 +952,17 @@
 " int     genutils#GetSelectedIndex()
 " -----------------------
 " Deprecations:
-"   - genutils#MakeArgumentString, genutils#MakeArgumentList and
-"     genutils#CreateArgString are deprecated. Vim7 now includes call()
-"     function to receive and pass argument lists around.
+"   - MakeArgumentString, MakeArgumentList and CreateArgString are deprecated.
+"     Vim7 now includes call() function to receive and pass argument lists
+"     around.
 "   - The g:makeArgumentString and g:makeArgumentList are obsolete and are
-"     deprecated, please use genutils#MakeArgumentString() and
-"     genutils#MakeArgumentList() instead.
-"   - genutils#FindWindowForBuffer() function is now deprecated, as the
-"     corresponding Vim bugs are fixed. Use the below expr instead:
+"     deprecated, please use MakeArgumentString() and MakeArgumentList()
+"     instead.
+"   - FindWindowForBuffer() function is now deprecated, as the corresponding
+"     Vim bugs are fixed. Use the below expr instead:
 "       bufwinnr(genutils#FindBufferForName(fileName))
+"   - QSort(), QSort2(), BinInsertSort() and BinInsertSort2() functions are
+"     now deprecated in favor of sort() function.
 "
 " Sample Usages Or Tips:
 "   - Add the following command to your vimrc to turn off diff settings.
@@ -1075,6 +1000,9 @@
 "             \ :new | put! =genutils#GetVimCmdOutput('<args>') |
 "             \ setl bufhidden=wipe | setl nomodified
 "
+" Changes in 2.1:
+"   - Fixed a typo in AddNotifyWindowClose() in the previous release.
+"   - Added BinSearchList() function.
 " Changes in 2.0:
 "   - Converted to Vim7 autoload script. Since there is no common prefix to
 "     find all the usages of genutils functions in your script, Use the
@@ -1111,4 +1039,4 @@ if v:version < 700
   finish
 endif
 
-let loaded_genutils = 200
+let loaded_genutils = 201
