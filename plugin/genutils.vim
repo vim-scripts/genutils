@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara (hari_vim at yahoo dot com)
-" Last Change: 23-Jun-2006 @ 17:41
+" Last Change: 18-Aug-2006 @ 18:38
 " Requires: Vim-7.0
-" Version: 2.1.0
+" Version: 2.2.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -165,7 +165,7 @@
 "   String  genutils#UnEscape(String str, String chars)
 "   String  genutils#DeEscape(String str)
 "   String  genutils#CrUnProtectedCharsPattern(String chars)
-"   String  genutils#EscapeCommand(String cmd, String args, String pipe)
+"   String  genutils#EscapeCommand(String cmd, List/String args, List/String pipe)
 "   int     genutils#GetShellEnvType()
 "   String  genutils#ExpandStr(String str)
 "   String  genutils#QuoteStr(String str)
@@ -686,10 +686,12 @@
 " This function creates a pattern that avoids the given protected characters'
 "   from getting treated as separators, when used with split(). The argument
 "   goes directly into the [] atom, so make sure you pass in a valid string.
+"   When optional argument capture is true, the characters are placed in a
+"   capturing group.
 " Ex:
 "   let paths = split(&path, genutils#CrUnProtectedCharsPattern(','))
 "
-" String  genutils#CrUnProtectedCharsPattern(String chars)
+" String  genutils#CrUnProtectedCharsPattern(String chars, [boolean capture = false])
 " ----------------------- 
 " genutils#Escape the passed in shell command with quotes and backslashes such
 "   a way that the arguments reach the command literally (avoids shell
@@ -698,10 +700,11 @@
 "   argument is the arguments to the command and third argument is any pipe
 "   command that should be appended to the command. The reason the function
 "   requires them to be passed separately is that the escaping is minimized
-"   for the first and third arguments. It understand the protected spaces in
-"   the arguments.
+"   for the first and third arguments. It is preferable to pass args as a Vim7
+"   List, but it can be passed as a single string with spaces separating the
+"   arguments (spaces in side each argument then needs to be protected)
 "   Usage:
-"     let fullCmd = genutils#EscapeCommand('ls', '-u '.expand('%:h'), '| grep xxx')
+"     let fullCmd = genutils#EscapeCommand('ls', ['-u', expand('%:h')], ['|', 'grep', 'xxx'])
 "   Note:
 "     If the escaped command is used on Vim command-line (such as with ":w !",
 "     ":r !" and ":!"), you need to further protect '%', '#' and '!' chars,
@@ -709,7 +712,7 @@
 "     invoking external cmd. However this is not required for using it with
 "     system() function. The easiest way to escape them is by using the
 "     genutils#Escape() function as in "Escape(fullCmd, '%#!')".
-" String  genutils#EscapeCommand(String cmd, String args, String pipe)
+" String  genutils#EscapeCommand(String cmd, List/String args, List/String pipe)
 " -----------------------
 " Returns the global ST_* constants (g:ST_WIN_CMD, g:ST_WIN_SH, g:ST_UNIX)
 " based on the values of shell related settings and the OS on which Vim is
@@ -1000,6 +1003,10 @@
 "             \ :new | put! =genutils#GetVimCmdOutput('<args>') |
 "             \ setl bufhidden=wipe | setl nomodified
 "
+" Changes in 2.2:
+"   - EscapeCommand() now supports Lists as arguments.
+"   - CrUnProtectedCharsPattern() now accepts an optional "capture" argument.
+"   - Renamed PromptForElement2 to PromptForElement. It was a typo.
 " Changes in 2.1:
 "   - Fixed a typo in AddNotifyWindowClose() in the previous release.
 "   - Added BinSearchList() function.
@@ -1039,4 +1046,4 @@ if v:version < 700
   finish
 endif
 
-let loaded_genutils = 201
+let loaded_genutils = 202

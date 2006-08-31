@@ -8,9 +8,6 @@
 "
 "   - EscapeCommand() didn't work for David Fishburn.
 "   - Save/RestoreWindowSettings doesn't work well.
-"   - Support specifying arguments (with spaces) enclosed in "" or '' for
-"     makeArgumentString. Just combine the arguments that are between "" or ''
-"     and strip the quotes off.
 "
 "   Vim7:
 "   - Save/RestoreWindowSettings can use winsave/restview() functions.
@@ -499,7 +496,11 @@ endfunction
 " - For Unix+sh, use single-quotes to sorround the arguments and for embedded
 "   single-quotes, just replace them with '"'"'. 
 function! genutils#EscapeCommand(cmd, args, pipe)
-  let fullCmd = a:args
+  if type(a:args) == 3
+    let args = copy(a:args)
+  else
+    let args = split(a:args, genutils#CrUnProtectedCharsPattern(' '))
+  endif
   " I am only worried about passing arguments with spaces as they are to the
   "   external commands, I currently don't care about back-slashes
   "   (backslashes are normally expected only on windows when 'shellslash'
@@ -511,12 +512,12 @@ function! genutils#EscapeCommand(cmd, args, pipe)
   if shellEnvType ==# g:ST_WIN_CMD
     let quoteChar = '"'
     " genutils#Escape the existing double-quotes (by doubling them).
-    let fullCmd = substitute(fullCmd, '"', '""', 'g')
+    call map(args, "substitute(v:val, '\"', '\"\"', 'g')")
   else
     let quoteChar = "'"
     if shellEnvType ==# g:ST_WIN_SH
       " genutils#Escape the existing double-quotes (by doubling them).
-      let fullCmd = substitute(fullCmd, '"', '""', 'g')
+      call map(args, "substitute(v:val, '\"', '\"\"', 'g')")
     endif
     " Take care of existing single-quotes (by exposing them, as you can't have
     "   single-quotes inside a single-quoted string).
@@ -525,18 +526,23 @@ function! genutils#EscapeCommand(cmd, args, pipe)
     else
       let squoteRepl = "'\"'\"'"
     endif
-    let fullCmd = substitute(fullCmd, "'", squoteRepl, 'g')
+    call map(args, "substitute(v:val, \"'\", squoteRepl, 'g')")
   endif
 
   " Now sorround the arguments with quotes, considering the protected
-  "   spaces.
-  let fullCmd = substitute(fullCmd, '\(\%([^ ]\|\\\@<=\%(\\\\\)* \)\+\)',
-        \ quoteChar.'\1'.quoteChar, 'g')
+  "   spaces. Skip the && or || construct from doing this.
+  call map(args, 'v:val=~"^[&|]\\{2}$"?(v:val):(quoteChar.v:val.quoteChar)')
+  let fullCmd = join(args, ' ')
   " We delay adding pipe part so that we can avoid the above processing.
-  if a:pipe !~# '^\s*$'
+  let pipe = ''
+  if type(a:pipe) == 3 && len(a:pipe) > 0
+    let pipe = join(a:pipe, ' ')
+  elseif type(a:pipe) == 1 && a:pipe !~# '^\s*$'
+    let pipe = a:pipe
+  endif
+  if pipe != ''
     let fullCmd = fullCmd . ' ' . a:pipe
   endif
-  let fullCmd = genutils#UnEscape(fullCmd, ' ') " Unescape just the spaces.
   if a:cmd !~# '^\s*$'
     let fullCmd = a:cmd . ' ' . fullCmd
   endif
@@ -801,7 +807,7 @@ function! genutils#PathIsFileNameOnly(path)
 endfunction
 
 let s:mySNR = ''
-function s:SNR()
+function! s:SNR()
   if s:mySNR == ''
     let s:mySNR = matchstr(expand('<sfile>'), '<SNR>\d\+_\zeSNR$')
   endif
@@ -1457,7 +1463,20 @@ function! genutils#BinSearchForInsert2(start, end, line, cmp, direction,
   let end = a:end
   while start < end
     let middle = (start + end + 1) / 2
-    let result = {a:cmp}({a:accessor}(middle, a:context), a:line, a:direction)
+    " Support passing both Funcref's as well as names.
+    if type(a:cmp) == 2
+      if type(a:accessor) == 2
+        let result = a:cmp(a:accessor(middle, a:context), a:line, a:direction)
+      else
+        let result = a:cmp({a:accessor}(middle, a:context), a:line, a:direction)
+      endif
+    else
+      if type(a:accessor) == 2
+        let result = {a:cmp}(a:accessor(middle, a:context), a:line, a:direction)
+      else
+        let result = {a:cmp}({a:accessor}(middle, a:context), a:line, a:direction)
+      endif
+    endif
     if result < 0
       let start = middle
     else
@@ -1797,16 +1816,20 @@ endfunction
 
 let s:UNPROTECTED_CHAR_PRFX = '\%(\%([^\\]\|^\)\\\%(\\\\\)*\)\@<!' " Doesn't eat slashes.
 "let s:UNPROTECTED_CHAR_PRFX = '\\\@<!\%(\\\\\)*' " Eats slashes.
-function! genutils#CrUnProtectedCharsPattern(sepChars)
+function! genutils#CrUnProtectedCharsPattern(chars, ...)
+  let capture = (a:0 > 0?1:0)
   let regex = s:UNPROTECTED_CHAR_PRFX
-  let sep = a:sepChars
-  if strlen(sep) > 1
-    let sep = '['.sep.']'
+  let chars = a:chars
+  if strlen(chars) > 1
+    let chars = '['.chars.']'
   endif
-  return regex.sep
+  if capture
+    let chars = '\('.chars.'\)'
+  endif
+  return regex.chars
 endfunction
 
-function! genutils#PromptForElement2(array, default, msg, skip, useDialog,
+function! genutils#PromptForElement(array, default, msg, skip, useDialog,
       \ nCols)
   let nCols = a:nCols
   let index = 0
