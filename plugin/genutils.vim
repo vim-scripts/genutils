@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara (hari_vim at yahoo dot com)
-" Last Change: 18-Aug-2006 @ 18:38
+" Last Change: 01-Sep-2006 @ 18:17
 " Requires: Vim-7.0
-" Version: 2.2.0
+" Version: 2.3.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -892,7 +892,7 @@
 " boolean genutils#DefFileChangedShell()
 " -----------------------
 " Execute a substitute command silently and without corrupting the search
-"   register.
+"   register. It also preserves the cursor position.
 " Ex:
 "   To insert a tab infrontof all lines:
 "         call genutils#SilentSubstitute('^', '%s//\t/e')
@@ -903,7 +903,7 @@
 " -----------------------
 " Delete all lines matching the given pattern silently and without corrupting
 "   the search register. The range argument if passed should be a valid prefix
-"   for the :global command.
+"   for the :global command. It also preserves the cursor position.
 " Ex:
 "   To delete all lines that are empty:
 "         call genutils#SilentDelete('^\s*$')
@@ -1003,6 +1003,9 @@
 "             \ :new | put! =genutils#GetVimCmdOutput('<args>') |
 "             \ setl bufhidden=wipe | setl nomodified
 "
+" Changes in 2.3:
+"   - SilentSubstitute() and SilentDelete() should preserve cursor position.
+"   - CleanupFileName() should also remove any leading or trailing whitespace.
 " Changes in 2.2:
 "   - EscapeCommand() now supports Lists as arguments.
 "   - CrUnProtectedCharsPattern() now accepts an optional "capture" argument.
@@ -1046,4 +1049,4 @@ if v:version < 700
   finish
 endif
 
-let loaded_genutils = 202
+let loaded_genutils = 203

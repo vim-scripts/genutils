@@ -720,7 +720,7 @@ function! genutils#CleanupFileName(fileName)
 endfunction
 
 function! genutils#CleanupFileName2(fileName, win32ProtectedChars)
-  let fileName = a:fileName
+  let fileName = substitute(a:fileName, '^\s\+\|\s\+$', '', 'g')
 
   " Expand relative paths and paths containing relative components (takes care
   " of ~ also).
@@ -1573,12 +1573,15 @@ function! genutils#GetSpacer(width)
 endfunction
 
 function! genutils#SilentSubstitute(pat, cmd)
+  call genutils#SaveHardPosition('SilentSubstitute')
   let _search = @/
   try
     let @/ = a:pat
     keepjumps silent! exec a:cmd
   finally
     let @/ = _search
+    call genutils#RestoreHardPosition('SilentSubstitute')
+    call genutils#ResetHardPosition('SilentSubstitute')
   endtry
 endfunction
 
@@ -1592,11 +1595,14 @@ function! genutils#SilentDelete(arg1, ...)
     let pat = a:arg1
   endif
   let _search = @/
+  call genutils#SaveHardPosition('SilentDelete')
   try
     let @/ = pat
     keepjumps silent! exec range'g//d _'
   finally
     let @/ = _search
+    call genutils#RestoreHardPosition('SilentDelete')
+    call genutils#ResetHardPosition('SilentDelete')
   endtry
 endfunction
 
