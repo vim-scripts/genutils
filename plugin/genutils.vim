@@ -1,8 +1,8 @@
 " genutils: Useful buffer, file and window related functions.
 " Author: Hari Krishna Dara (hari_vim at yahoo dot com)
-" Last Change: 01-Sep-2006 @ 18:17
+" Last Change: 08-Jun-2007 @ 17:36
 " Requires: Vim-7.0
-" Version: 2.3.0
+" Version: 2.4.0
 " Licence: This program is free software; you can redistribute it and/or
 "          modify it under the terms of the GNU General Public License.
 "          See http://www.gnu.org/copyleft/gpl.txt 
@@ -53,6 +53,8 @@
 "     There are also a couple of functions genutils#BinSearchForInsert() and
 "     genutils#BinSearchForInsert2() to find the location for a newline to be
 "     inserted in an already sorted buffer or arbitrary data.
+"     There are also a few comparison functions that can be used with sort() or
+"     the above functions.
 "   - ExecMap function has now been separated as a plugin called execmap.vim.
 "   - New genutils#CommonPath() function to extract the common part of two
 "     paths, and genutils#RelPathFromFile() and genutils#RelPathFromDir() to
@@ -153,9 +155,6 @@
 "                              String cmp, int direction)
 "   int     genutils#BinSearchForInsert2(int start, int end, line, String cmp,
 "                               int direction, String accessor, String context)
-"   void    genutils#BinInsertSort(String cmp, int direction) range
-"   void    genutils#BinInsertSort2(int start, int end, String cmp,
-"                  int direction, String accessor, String mover, String context)
 "   String  genutils#CommonPath(String path1, String path2)
 "   String  genutils#CommonString(String str1, String str2)
 "   String  genutils#RelPathFromFile(String srcFile, String tgtFile)
@@ -560,74 +559,17 @@
 " void    genutils#CenterWordInSpace()
 " -----------------------
 " -----------------------
-" Given a sorted list of items, search for the index after which the given
-"   item can be inserted. The comparator function is exactly same as for the
-"   sort() function.
-"
-" Returns (start-1) when the item is smaller than the first item, or an index
-"   which is in the range of (start, end) inclusive. When start is 0, and item
-"   comes before list[0], you will get -1, which you shouldn't confuse with
-"   list -ve indexes.
-"
-" Ex:
-"     echo genutils#BinSearchList(range(1, 100, 10), 0, 10, 'NumberCompare')
-"     
-"     function! NumberCompare(n1, n2)
-"       if a:n1 == a:n2
-"         return 0
-"       elseif a:n1 < a:n2
-"         return -1
-"       else
-"         return 1
-"       endif
-"     endfunction
-"
-"   int     genutils#BinSearchList(List list, int start, int end, Object item,
-"                              [Funcref|String] cmp)
-" -----------------------
-" Return the line number where given line can be inserted in the current
-"   buffer. This can also be interpreted as the line in the current buffer
-"   after which the new line should go.
-" Assumes that the lines are already sorted in the given direction using the
-"   given comparator.
-"
-" int     genutils#BinSearchForInsert(int start, int end, String line,
-"                            String cmp, int direction)
-" -----------------------
-" A more generic implementation of genutils#BinSearchForInsert, which doesn't
-"   restrict the search to the current buffer.
-"
-" int     genutils#BinSearchForInsert2(int start, int end, line, String cmp,
-"                             int direction, String accessor, String context)
-" -----------------------
-" Sorts a range of lines in the current buffer, in the given range, using the
-"   comparator that is passed in. This function is just like genutils#QSort(),
-"   except that it uses Peit Delport's "binary insertion sort" algorithm,
-"   which is generally much faster than the "quick sort" algorithm.
-"
-" void    genutils#BinInsertSort(String cmp, int direction) range
-" -----------------------
-" This is a more generic version of genutils#BinInsertSort, just like
-"   genutils#QSort2, that will let you provide your own accessor and mover, so
-"   that you can extend the sorting to something beyond the current buffer
-"   lines. See multvals.vim plugin for example usage.
-"
-" The mover is called with the index that needs to be moved and the
-"   destination index to which it needs to be moved, along with the context,
-"   something like this:
-"     function! CustomMover(from, to, context)
-"
-" void    genutils#BinInsertSort2(int start, int end, String cmp, int direction,
-"                String accessor, String mover, String context)
-" -----------------------
-" -----------------------
 " Find common path component of two filenames.
 "   Based on the thread, "computing relative path".
 "   Date: Mon, 29 Jul 2002 21:30:56 +0200 (CEST)
+" The last two arguments are optional and default to 0 (false), but you can
+"   pass a value of 1 (true) to indicate that the path represents a directory.
 " Ex:
 "   genutils#CommonPath('/a/b/c/d.e', '/a/b/f/g/h.i') => '/a/b/'
+"   genutils#CommonPath('/a/b/c/d.e', '/a/b/') => '/a/b'
+"   genutils#CommonPath('/a/b/c/d.e', '/a/b/', 0, 1) => '/a/b/'
 "
-" String  genutils#CommonPath(String path1, String path2)
+" String  genutils#CommonPath(String path1, String path2 [, boolean path1IsDir, boolean path2IsDir])
 " -----------------------
 " Find common string component of two strings.
 "   Based on the tread, "computing relative path".
@@ -955,6 +897,7 @@
 " int     genutils#GetSelectedIndex()
 " -----------------------
 " Deprecations:
+"   - CleanDiffOptions() is deprecated as Vim now has the :diffoff command.
 "   - MakeArgumentString, MakeArgumentList and CreateArgString are deprecated.
 "     Vim7 now includes call() function to receive and pass argument lists
 "     around.
@@ -966,11 +909,9 @@
 "       bufwinnr(genutils#FindBufferForName(fileName))
 "   - QSort(), QSort2(), BinInsertSort() and BinInsertSort2() functions are
 "     now deprecated in favor of sort() function.
+"       
 "
 " Sample Usages Or Tips:
-"   - Add the following command to your vimrc to turn off diff settings.
-"       command! DiffOff :call genutils#CleanDiffOptions()
-"       
 "   - Add the following commands to create simple sort commands.
 "       command! -nargs=0 -range=% SortByLength <line1>,<line2>call
 "           \ genutils#QSort('genutils#CmpByLineLengthNname', 1)
@@ -1003,6 +944,9 @@
 "             \ :new | put! =genutils#GetVimCmdOutput('<args>') |
 "             \ setl bufhidden=wipe | setl nomodified
 "
+" Changes in 2.4:
+"   - Fixed some corner cases in RelPathFromDir()/RelPathFromFile().
+"   - Made the default comparators sort() function friendly.
 " Changes in 2.3:
 "   - SilentSubstitute() and SilentDelete() should preserve cursor position.
 "   - CleanupFileName() should also remove any leading or trailing whitespace.
@@ -1049,4 +993,4 @@ if v:version < 700
   finish
 endif
 
-let loaded_genutils = 203
+let loaded_genutils = 204

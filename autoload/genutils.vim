@@ -1,10 +1,12 @@
 " genutils.vim: Please see plugin/genutils.vim
 "
 " TODO:
+"   - Vim7: redir can be used with a variable.
 "   - fnamemodify() on Unix doesn't expand to full name if the filename doesn't
 "     really exist on the filesystem.
 "   - Is setting 'scrolloff' and 'sidescrolloff' to 0 required while moving the
 "     cursor?
+"   - http://www.vim.org/tips/tip.php?tip_id=1379
 "
 "   - EscapeCommand() didn't work for David Fishburn.
 "   - Save/RestoreWindowSettings doesn't work well.
@@ -308,7 +310,7 @@ function! genutils#MoveCursorToNextInWinStack(dir)
 endfunction
 
 function! genutils#GetNextWinnrInStack(dir)
-  let newwin = 0
+  let newwin = winnr()
   let _eventignore = &eventignore
   try
     set eventignore=all
@@ -329,7 +331,7 @@ function! genutils#MoveCursorToLastInWinStack(dir)
 endfunction
 
 function! genutils#GetLastWinnrInStack(dir)
-  let newwin = 0
+  let newwin = winnr()
   let _eventignore = &eventignore
   try
     set eventignore=all
@@ -352,7 +354,7 @@ endfunction
 
 " Based on the WinStackMv() function posted by Charles E. Campbell, Jr. on vim
 "   mailing list on Jul 14, 2004.
-function! genutils#GetNextWinnrInStack(dir)
+function! s:GetNextWinnrInStack(dir)
   "call Decho("genutils#MoveCursorToNextInWinStack(dir<".a:dir.">)")
 
   let isHorizontalMov = (a:dir ==# 'h' || a:dir ==# 'l') ? 1 : 0
@@ -1207,7 +1209,9 @@ function! genutils#UserFileComplete(ArgLead, CmdLine, CursorPos, smartSlash,
   else
     let glob = s:FixPathSep(glob(a:ArgLead.'*'), opathsep, npathsep)
   endif
-  return glob
+  " FIXME: Need an option to control if ArgLead should also be returned or
+  " not.
+  return glob."\n".a:ArgLead
 endfunction
 
 command! -complete=file -nargs=* GUDebugEcho :echo <q-args>
@@ -1268,35 +1272,26 @@ endfunction
 " Comapare functions.
 "
 
-function! s:CmpByLineLengthNname(line1, line2, direction)
-  return genutils#CmpByLineLengthNname(a:line1, a:line2, a:direction)
-endfunction
-
-function! genutils#CmpByLineLengthNname(line1, line2, direction)
-  let cmp = genutils#CmpByLength(a:line1, a:line2, a:direction)
+function! genutils#CmpByLineLengthNname(line1, line2, ...)
+  let direction = (a:0?a:1:1)
+  let cmp = genutils#CmpByLength(a:line1, a:line2, direction)
   if cmp == 0
-    let cmp = genutils#CmpByString(a:line1, a:line2, a:direction)
+    let cmp = genutils#CmpByString(a:line1, a:line2, direction)
   endif
   return cmp
 endfunction
 
-function! s:CmpByLength(line1, line2, direction)
-  return genutils#CmpByLength(a:line1, a:line2, a:direction)
-endfunction
-
-function! genutils#CmpByLength(line1, line2, direction)
+function! genutils#CmpByLength(line1, line2, ...)
+  let direction = (a:0?a:1:1)
   let len1 = strlen(a:line1)
   let len2 = strlen(a:line2)
-  return a:direction * (len1 - len2)
-endfunction
-
-function! s:CmpJavaImports(line1, line2, direction)
-  return genutils#CmpJavaImports(a:line1, a:line2, a:direction)
+  return direction * (len1 - len2)
 endfunction
 
 " Compare first by name and then by length.
 " Useful for sorting Java imports.
-function! genutils#CmpJavaImports(line1, line2, direction)
+function! genutils#CmpJavaImports(line1, line2, ...)
+  let direction = (a:0?a:1:1)
   " FIXME: Simplify this.
   if stridx(a:line1, '.') == -1
     let pkg1 = ''
@@ -1313,49 +1308,44 @@ function! genutils#CmpJavaImports(line1, line2, direction)
     let cls2 = substitute(a:line2, '^.*\.\([^. ;]\+\).*$', '\1', '')
   endif
 
-  let cmp = genutils#CmpByString(pkg1, pkg2, a:direction)
+  let cmp = genutils#CmpByString(pkg1, pkg2, direction)
   if cmp == 0
-    let cmp = genutils#CmpByLength(cls1, cls2, a:direction)
+    let cmp = genutils#CmpByLength(cls1, cls2, direction)
   endif
   return cmp
 endfunction
 
-function! s:CmpByString(line1, line2, direction)
-  return genutils#CmpByString(a:line1, a:line2, a:direction)
-endfunction
-
-function! genutils#CmpByString(line1, line2, direction)
+function! genutils#CmpByString(line1, line2, ...)
+  let direction = (a:0?a:1:1)
   if a:line1 < a:line2
-    return -a:direction
+    return -direction
   elseif a:line1 > a:line2
-    return a:direction
+    return direction
   else
     return 0
   endif
 endfunction
 
-function! genutils#CmpByStringIgnoreCase(line1, line2, direction)
+function! genutils#CmpByStringIgnoreCase(line1, line2, ...)
+  let direction = (a:0?a:1:1)
   if a:line1 <? a:line2
-    return -a:direction
+    return -direction
   elseif a:line1 >? a:line2
-    return a:direction
+    return direction
   else
     return 0
   endif
 endfunction
 
-function! s:CmpByNumber(line1, line2, direction)
-  return genutils#CmpByNumber(a:line1, a:line2, a:direction)
-endfunction
-
-function! genutils#CmpByNumber(line1, line2, direction)
+function! genutils#CmpByNumber(line1, line2, ...)
+  let direction = (a:0 ? a:1 :1)
   let num1 = a:line1 + 0
   let num2 = a:line2 + 0
 
   if num1 < num2
-    return -a:direction
+    return -direction
   elseif num1 > num2
-    return a:direction
+    return direction
   else
     return 0
   endif
@@ -1649,9 +1639,9 @@ endfun
 
 
 " BEGIN: Relative path {{{
-function! genutils#CommonPath(path1, path2)
-  let path1 = genutils#CleanupFileName(a:path1)
-  let path2 = genutils#CleanupFileName(a:path2)
+function! genutils#CommonPath(path1, path2, ...)
+  let path1 = genutils#CleanupFileName(a:path1) . ((a:0 > 0 ? a:1 : 0) ? '/' : '')
+  let path2 = genutils#CleanupFileName(a:path2) . ((a:0 > 1 ? a:2 : 0) ? '/' : '')
   return genutils#CommonString(path1, path2)
 endfunction
 
@@ -1673,13 +1663,16 @@ function! genutils#RelPathFromFile(srcFile, tgtFile)
 endfunction
 
 function! genutils#RelPathFromDir(srcDir, tgtFile)
-  let cleanDir = genutils#CleanupFileName(a:srcDir)
+  let cleanDir = genutils#CleanupFileName(a:srcDir).'/'
   let cleanFile = genutils#CleanupFileName(a:tgtFile)
-  let cmnPath = genutils#CommonPath(cleanDir, cleanFile)
-  let shortDir = strpart(cleanDir, strlen(cmnPath))
-  let shortFile = strpart(cleanFile, strlen(cmnPath))
-  let relPath = substitute(shortDir, '[^/]\+', '..', 'g')
-  return relPath . '/' . shortFile
+  let cmnPath = genutils#CommonPath(cleanDir, cleanFile, 1)
+  let relDirFromCmnPath = strpart(cleanDir, strlen(cmnPath))
+  if relDirFromCmnPath == '/' " This means the file is under the srcDir.
+    let relDirFromCmnPath = ''
+  endif
+  let relFileFromCmnPath = strpart(cleanFile, strlen(cmnPath))
+  return substitute(relDirFromCmnPath, '[^/]\+', '..', 'g') .
+        \ relFileFromCmnPath
 endfunction
 
 " END: Relative path }}}
